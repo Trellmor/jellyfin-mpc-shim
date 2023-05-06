@@ -9,6 +9,7 @@ using JellyfinMPCShim.Tray;
 using JellyfinMPCShim.Tray.Properties;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Serilog;
 using WindowsFormsLifetime;
 
 var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3);
@@ -34,6 +35,11 @@ var host = Host.CreateDefaultBuilder(args)
         startForm => new TrayApplicationContext(startForm))
     .ConfigureServices((context, services) =>
     {
+        services.AddSerilog((_, configuration) =>
+        {
+            configuration
+                .ReadFrom.Configuration(context.Configuration);
+        });
         services.AddHttpClient("Default", c =>
         {
             c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("jellyfin-mpc-shim-tray",
