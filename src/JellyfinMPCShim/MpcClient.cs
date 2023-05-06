@@ -12,16 +12,19 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
 {
     private readonly ILogger<MpcClient> _logger;
     private readonly IJellyfinClient _jellyfinClient;
+    private readonly IOptions<MpcClientOptions> _mpcClientOptions;
     private Media? _media;
     private Info? _lastState;
     private MPCHomeCinema? _mpc;
     private MPCHomeCinemaObserver? _mpcObserver;
     private string? _path;
 
-    public MpcClient(ILogger<MpcClient> logger, IJellyfinClient jellyfinClient)
+    public MpcClient(ILogger<MpcClient> logger, IJellyfinClient jellyfinClient,
+        IOptions<MpcClientOptions> mpcClientOptions)
     {
         _logger = logger;
         _jellyfinClient = jellyfinClient;
+        _mpcClientOptions = mpcClientOptions;
     }
 
     public async Task Start(string path, int port)
@@ -35,6 +38,28 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
         _mpc = new MPCHomeCinema($"http://localhost:{port}");
         _jellyfinClient.SetMessageHandler(this);
         await StartObserver();
+
+        DeleteTemporaryFiles();
+    }
+
+    private void DeleteTemporaryFiles()
+    {
+        if (!string.IsNullOrWhiteSpace(_mpcClientOptions.Value.TempPath) &&
+            Directory.Exists(_mpcClientOptions.Value.TempPath))
+        {
+            var files = Directory.GetFiles(_mpcClientOptions.Value.TempPath, "*.m3u");
+            foreach (var file in files)
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete {file}", file);
+                }
+            }
+        }
     }
 
     private async Task StartObserver()
@@ -68,8 +93,16 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                 message.Data.AudioStreamIndex, message.Data.SubtitleStreamIndex, message.Data.MediaSourceId);
             var uri = await _media.Video.GetPlaybackUrl();
 
+            var filename = Path.GetRandomFileName() + ".m3u";
             //Create M3U Playlist
-            var filename = Path.GetFullPath(Path.GetRandomFileName() + ".m3u");
+            if (!string.IsNullOrWhiteSpace(_mpcClientOptions.Value.TempPath))
+            {
+                Directory.CreateDirectory(_mpcClientOptions.Value.TempPath);
+                filename = Path.Combine(_mpcClientOptions.Value.TempPath, filename);
+            }
+
+            filename = Path.GetFullPath(filename);
+
             await using (var s = File.OpenWrite(filename))
             await using (var write = new StreamWriter(s))
             {

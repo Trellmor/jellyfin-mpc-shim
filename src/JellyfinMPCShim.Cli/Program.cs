@@ -7,8 +7,6 @@ using Jellyfin.Sdk;
 using JellyfinMPCShim.Cli;
 using JellyfinMPCShim.Cli.Models;
 using JellyfinMPCShim.Extensions;
-using JellyfinMPCShim.Interfaces;
-using JellyfinMPCShim.Models;
 using Serilog;
 
 var version = Assembly.GetEntryAssembly()!.GetName().Version!.ToString(3);
@@ -41,7 +39,10 @@ builder.Configuration.Bind("MPC", mpcSettings);
 
 builder.Services.AddJellyfin(DefaultHttpClientHandlerDelegate);
 
-builder.Services.AddMpcClient();
+builder.Services.AddMpcClient(options =>
+{
+    options.TempPath = Path.GetFullPath("temp");
+});
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();

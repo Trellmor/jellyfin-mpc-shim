@@ -1,8 +1,4 @@
-﻿using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Mime;
-using System.Text;
-using Jellyfin.Sdk;
+﻿using Jellyfin.Sdk;
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +31,19 @@ public static class ServiceExtension
 
     public static IServiceCollection AddMpcClient(this IServiceCollection services)
     {
+        return AddMpcClient(services, null);
+    }
+
+    public static IServiceCollection AddMpcClient(this IServiceCollection services, Action<MpcClientOptions>? options)
+    {
+        if (options != null)
+        {
+            services.Configure(options);
+        }
+        else
+        {
+            services.AddOptions<MpcClientOptions>();
+        }
         services.AddSingleton<IMpcClient, MpcClient>();
         return services;
     }

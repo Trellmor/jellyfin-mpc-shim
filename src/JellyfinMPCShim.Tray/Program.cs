@@ -44,7 +44,10 @@ var host = Host.CreateDefaultBuilder(args)
         }).ConfigurePrimaryHttpMessageHandler(DefaultHttpClientHandlerDelegate);
 
         services.AddJellyfin(DefaultHttpClientHandlerDelegate);
-        services.AddMpcClient();
+        services.AddMpcClient(options =>
+        {
+            options.TempPath = Path.Combine(Path.GetTempPath(), "jellyfin-mpc-shim-tray");
+        });
     })
     .Build();
 

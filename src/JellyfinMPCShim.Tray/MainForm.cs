@@ -94,8 +94,9 @@ public partial class MainForm : Form
         ShowForm();
     }
 
-    private void exitToolStripMenuItem_Click(object sender, EventArgs e)
+    private async Task exitToolStripMenuItem_Click(object sender, EventArgs e)
     {
+        await _jellyfinClient.Stop();
         _hostlLifetime.StopApplication();
     }
 
