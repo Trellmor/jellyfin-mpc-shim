@@ -3,7 +3,18 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.33627.172
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JellyfinMPCShim.Cli", "src\JellyfinMPCShim.Cli\JellyfinMPCShim.Cli.csproj", "{82C0E1CF-FC60-4695-B25D-CE577152C90F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JellyfinMPCShim.Cli", "src\JellyfinMPCShim.Cli\JellyfinMPCShim.Cli.csproj", "{82C0E1CF-FC60-4695-B25D-CE577152C90F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{3453462F-396C-40F5-91AF-1448963447B5}"
+	ProjectSection(SolutionItems) = preProject
+		src\.editorconfig = src\.editorconfig
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Sdk", "lib\jellyfin-sdk-csharp\src\Jellyfin.Sdk.csproj", "{F3766536-EC68-4010-B1DB-D539E76DDCC7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JellyfinMPCShim", "src\JellyfinMPCShim\JellyfinMPCShim.csproj", "{E1919E7D-DF5F-45FB-8D82-CEA6992D8573}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JellyfinMPCShim.Tray", "src\JellyfinMPCShim.Tray\JellyfinMPCShim.Tray.csproj", "{82944F70-81AD-404C-B547-53192FD4AAFE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +26,18 @@ Global
 		{82C0E1CF-FC60-4695-B25D-CE577152C90F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{82C0E1CF-FC60-4695-B25D-CE577152C90F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{82C0E1CF-FC60-4695-B25D-CE577152C90F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3766536-EC68-4010-B1DB-D539E76DDCC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3766536-EC68-4010-B1DB-D539E76DDCC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3766536-EC68-4010-B1DB-D539E76DDCC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3766536-EC68-4010-B1DB-D539E76DDCC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1919E7D-DF5F-45FB-8D82-CEA6992D8573}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1919E7D-DF5F-45FB-8D82-CEA6992D8573}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1919E7D-DF5F-45FB-8D82-CEA6992D8573}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1919E7D-DF5F-45FB-8D82-CEA6992D8573}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82944F70-81AD-404C-B547-53192FD4AAFE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82944F70-81AD-404C-B547-53192FD4AAFE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82944F70-81AD-404C-B547-53192FD4AAFE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82944F70-81AD-404C-B547-53192FD4AAFE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
