@@ -32,6 +32,7 @@ partial class MainForm
         var resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
         trayIcon = new NotifyIcon(components);
         trayMenu = new ContextMenuStrip(components);
+        connectionToolStripMenuItem = new ToolStripMenuItem();
         settingsToolStripMenuItem = new ToolStripMenuItem();
         exitToolStripMenuItem = new ToolStripMenuItem();
         groupBoxJellyfin = new GroupBox();
@@ -47,7 +48,7 @@ partial class MainForm
         textBoxMpcPath = new TextBox();
         label5 = new Label();
         label4 = new Label();
-        connectionToolStripMenuItem = new ToolStripMenuItem();
+        logsToolStripMenuItem = new ToolStripMenuItem();
         trayMenu.SuspendLayout();
         groupBoxJellyfin.SuspendLayout();
         groupBoxMpc.SuspendLayout();
@@ -64,9 +65,16 @@ partial class MainForm
         // 
         // trayMenu
         // 
-        trayMenu.Items.AddRange(new ToolStripItem[] { connectionToolStripMenuItem, settingsToolStripMenuItem, exitToolStripMenuItem });
+        trayMenu.Items.AddRange(new ToolStripItem[] { connectionToolStripMenuItem, settingsToolStripMenuItem, logsToolStripMenuItem, exitToolStripMenuItem });
         trayMenu.Name = "trayMenu";
-        trayMenu.Size = new Size(181, 92);
+        trayMenu.Size = new Size(181, 114);
+        // 
+        // connectionToolStripMenuItem
+        // 
+        connectionToolStripMenuItem.Name = "connectionToolStripMenuItem";
+        connectionToolStripMenuItem.Size = new Size(180, 22);
+        connectionToolStripMenuItem.Text = "Connection";
+        connectionToolStripMenuItem.Visible = false;
         // 
         // settingsToolStripMenuItem
         // 
@@ -205,12 +213,12 @@ partial class MainForm
         label4.TabIndex = 0;
         label4.Text = "Path";
         // 
-        // connectionToolStripMenuItem
+        // logsToolStripMenuItem
         // 
-        connectionToolStripMenuItem.Name = "connectionToolStripMenuItem";
-        connectionToolStripMenuItem.Size = new Size(180, 22);
-        connectionToolStripMenuItem.Text = "Connection";
-        connectionToolStripMenuItem.Visible = false;
+        logsToolStripMenuItem.Name = "logsToolStripMenuItem";
+        logsToolStripMenuItem.Size = new Size(180, 22);
+        logsToolStripMenuItem.Text = "Logs";
+        logsToolStripMenuItem.Click += logsToolStripMenuItem_Click;
         // 
         // MainForm
         // 
@@ -254,4 +262,5 @@ partial class MainForm
     private Label label4;
     private NumericUpDown numericUpDownMpcPort;
     private ToolStripMenuItem connectionToolStripMenuItem;
+    private ToolStripMenuItem logsToolStripMenuItem;
 }

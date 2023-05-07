@@ -1,4 +1,5 @@
-﻿using JellyfinMPCShim.Interfaces;
+﻿using System.Diagnostics;
+using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Tray.Properties;
 using Microsoft.Extensions.Hosting;
 
@@ -137,5 +138,12 @@ public partial class MainForm : Form
 
         await _mpcClient.Start(Settings.Default.MpcPath, Settings.Default.MpcPort);
         Close();
+    }
+
+    private void logsToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        var path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        path = Path.Combine(path, "JellyfinMPCShim.Tray", "logs");
+        Process.Start("explorer.exe", path);
     }
 }
