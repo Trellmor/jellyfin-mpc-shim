@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using Jellyfin.Sdk;
+using JellyfinMPCShim.Extensions;
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
     private MPCHomeCinema? _mpc;
     private MPCHomeCinemaObserver? _mpcObserver;
     private string? _path;
+    private List<PlaylistItem>? _syncPlaylist;
 
     public MpcClient(ILogger<MpcClient> logger, IJellyfinClient jellyfinClient,
         IOptions<MpcClientOptions> mpcClientOptions)
@@ -36,7 +38,7 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
         }
 
         _mpc = new MPCHomeCinema($"http://localhost:{port}");
-        _jellyfinClient.SetMessageHandler(this);
+        _jellyfinClient.AddMessageHandler(this);
         await StartObserver();
 
         DeleteTemporaryFiles();
@@ -83,68 +85,101 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
 
     public async Task HandlePlay(JellyfinWebsockeMessage<PlayRequest> message)
     {
-        _ = _mpc ?? throw new InvalidOperationException("MpcClient has not been started");
-
         //await _jellyfinClient.CloseTranscode(TODO);
         //{"ItemIds":["8fa2e080856823d65e120b0444f8fe15"],"StartPositionTicks":15694430000,"PlayCommand":"PlayNow","ControllingUserId":"1b3df32ba0ca41bda50fc19a02d5a2e1"}
         if (message.Data.PlayCommand == PlayCommand.PlayNow)
         {
-            _media = new Media(_jellyfinClient, message.Data.ItemIds, message.Data.StartIndex ?? 0,
+            var media = new Media(_jellyfinClient, message.Data.ItemIds, message.Data.StartIndex ?? 0,
                 message.Data.AudioStreamIndex, message.Data.SubtitleStreamIndex, message.Data.MediaSourceId);
-            var uri = await _media.Video.GetPlaybackUrl();
+            await PlayMedia(media, message.Data.StartPositionTicks ?? 0);
+        }
+    }
 
-            var filename = Path.GetRandomFileName() + ".m3u";
-            //Create M3U Playlist
-            if (!string.IsNullOrWhiteSpace(_mpcClientOptions.Value.TempPath))
-            {
-                Directory.CreateDirectory(_mpcClientOptions.Value.TempPath);
-                filename = Path.Combine(_mpcClientOptions.Value.TempPath, filename);
-            }
+    private async Task PlayMedia(Media media, long startPosition, bool startPaused = false)
+    {
+        _ = _mpc ?? throw new InvalidOperationException("MpcClient has not been started");
 
-            filename = Path.GetFullPath(filename);
+        _media = media;
+        var uri = await _media.Video.GetPlaybackUrl();
 
-            await using (var s = File.OpenWrite(filename))
-            await using (var write = new StreamWriter(s))
-            {
-                await write.WriteLineAsync("#EXTM3U");
-                await write.WriteAsync(uri.ToString());
-            }
+        var filename = Path.GetRandomFileName() + ".m3u";
+        //Create M3U Playlist
+        if (!string.IsNullOrWhiteSpace(_mpcClientOptions.Value.TempPath))
+        {
+            Directory.CreateDirectory(_mpcClientOptions.Value.TempPath);
+            filename = Path.Combine(_mpcClientOptions.Value.TempPath, filename);
+        }
 
-            try
-            {
-                await _mpc.GetInfo();
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, "Failed to get MPC status");
-                //Wenn MPC nicht läuft, dann starten probieren
-                if (!string.IsNullOrWhiteSpace(_path) && File.Exists(_path))
-                {
-                    _logger.LogInformation("Starting mpc {path}", _path);
-                    var p = Process.Start(_path);
-                    p.WaitForInputIdle();
-                    await StartObserver();
-                }
-            }
+        filename = Path.GetFullPath(filename);
 
-            try
-            {
-                var result = await _mpc.OpenFileAsync(filename);
-                if (message.Data.StartPositionTicks > 0)
-                {
-                    var pos = TimeSpan.FromTicks(message.Data.StartPositionTicks ?? 0);
-                    pos = TimeSpan.FromSeconds(Math.Round(pos.TotalSeconds));
-                    result = await _mpc.SetPosition(pos);
-                }
+        await using (var s = File.OpenWrite(filename))
+        await using (var write = new StreamWriter(s))
+        {
+            await write.WriteLineAsync("#EXTM3U");
+            await write.WriteAsync(uri.ToString());
+        }
 
-                await _mpc.PlayAsync();
-            }
-            catch (Exception ex)
+        try
+        {
+            await _mpc.GetInfo();
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Failed to get MPC status");
+            //Wenn MPC nicht läuft, dann starten probieren
+            if (!string.IsNullOrWhiteSpace(_path) && File.Exists(_path))
             {
-                _logger.LogCritical(ex, "Error communicating with MPC");
-                throw;
+                _logger.LogInformation("Starting mpc {path}", _path);
+                var p = Process.Start(_path);
+                p.WaitForInputIdle();
+                await StartObserver();
             }
         }
+
+        try
+        {
+            var result = await _mpc.OpenFileAsync(filename);
+            if (startPaused)
+            {
+                await _mpc.PauseAsync();
+            }
+            else
+            {
+                await _mpc.PlayAsync();
+            }
+
+            if (startPosition > 0)
+            {
+                await SetPosition(startPosition);
+                var pos = TimeSpan.FromTicks(startPosition);
+                pos = TimeSpan.FromSeconds(Math.Round(pos.TotalSeconds));
+                result = await _mpc.SetPosition(pos);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Error communicating with MPC");
+            throw;
+        }
+    }
+
+    private async Task SetPosition(long startPosition)
+    {
+        _ = _mpc ?? throw new InvalidOperationException("MpcClient has not been started");
+
+        var pos = TimeSpan.FromTicks(startPosition);
+        pos = TimeSpan.FromSeconds(Math.Round(pos.TotalSeconds));
+        if (_lastState != null)
+        {
+            if (pos.TotalMilliseconds > _lastState.Position.TotalMilliseconds - 5000 &&
+                pos.TotalMilliseconds < _lastState.Position.TotalMilliseconds + 5000)
+            {
+                //Wenn die Position innerhalb von 5 sek liegt, kein Seek machen
+                return;
+            }
+        }
+
+        await _mpc.SetPosition(pos);
     }
 
     public async Task HandlePlayState(JellyfinWebsockeMessage<PlaystateRequest> message)
@@ -154,44 +189,143 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
             return;
         }
 
-        switch (message.Data.Command)
+        try
         {
-            case PlaystateCommand.Stop:
-                await _mpc.StopAsync();
-                break;
-            case PlaystateCommand.Pause:
-                await _mpc.PauseAsync();
-                break;
-            case PlaystateCommand.Unpause:
-                await _mpc.PlayAsync();
-                break;
-            case PlaystateCommand.NextTrack:
-                break;
-            case PlaystateCommand.PreviousTrack:
-                break;
-            case PlaystateCommand.Seek:
-                var pos = TimeSpan.FromTicks(message.Data.SeekPositionTicks ?? 0);
-                pos = TimeSpan.FromSeconds(Math.Round(pos.TotalSeconds));
-                await _mpc.SetPosition(pos);
-                break;
-            case PlaystateCommand.Rewind:
-                break;
-            case PlaystateCommand.FastForward:
-                break;
-            case PlaystateCommand.PlayPause:
-                var info = await _mpc.GetInfo();
-                if (info.State == State.Playing)
-                {
+            switch (message.Data.Command)
+            {
+                case PlaystateCommand.Stop:
+                    await _mpc.StopAsync();
+                    break;
+                case PlaystateCommand.Pause:
                     await _mpc.PauseAsync();
-                }
-                else if (info.State == State.Paused)
-                {
+                    break;
+                case PlaystateCommand.Unpause:
                     await _mpc.PlayAsync();
+                    break;
+                case PlaystateCommand.NextTrack:
+                    break;
+                case PlaystateCommand.PreviousTrack:
+                    break;
+                case PlaystateCommand.Seek:
+                    await SetPosition(message.Data.SeekPositionTicks ?? 0);
+                    break;
+                case PlaystateCommand.Rewind:
+                    break;
+                case PlaystateCommand.FastForward:
+                    break;
+                case PlaystateCommand.PlayPause:
+                    var info = await _mpc.GetInfo();
+                    if (info.State == State.Playing)
+                    {
+                        await _mpc.PauseAsync();
+                    }
+                    else if (info.State == State.Paused)
+                    {
+                        await _mpc.PlayAsync();
+                    }
+
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Error handling playState command");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Fatal error handling playState command");
+            throw;
+        }
+    }
+
+    public async Task HandleSyncGroupUpdate(JellyfinWebsockeMessage<ObjectGroupUpdate> syncPlayGroupUpdateMessage)
+    {
+        switch (syncPlayGroupUpdateMessage.Data.Type)
+        {
+            case GroupUpdateType.UserJoined:
+                break;
+            case GroupUpdateType.UserLeft:
+                break;
+            case GroupUpdateType.GroupJoined:
+                _syncPlaylist = null;
+                break;
+            case GroupUpdateType.GroupLeft:
+                _syncPlaylist = null;
+                break;
+            case GroupUpdateType.StateUpdate:
+                break;
+            case GroupUpdateType.PlayQueue:
+                var data = syncPlayGroupUpdateMessage.Data.GetData<PlayQueueUpdateData>();
+                if (data != null)
+                {
+                    _syncPlaylist = data.Playlist;
+                    var media = new Media(_jellyfinClient, data.Playlist.Select(i => i.ItemId), data.PlayingItemIndex,
+                        0, 0, null);
+                    await PlayMedia(media, data.StartPositionTicks, !data.IsPlaying);
                 }
 
                 break;
+            case GroupUpdateType.NotInGroup:
+                break;
+            case GroupUpdateType.GroupDoesNotExist:
+                break;
+            case GroupUpdateType.CreateGroupDenied:
+                break;
+            case GroupUpdateType.JoinGroupDenied:
+                break;
+            case GroupUpdateType.LibraryAccessDenied:
+                break;
             default:
                 throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    public async Task HandleSyncPlayCommand(JellyfinWebsockeMessage<SendCommand> syncPlayCommandMessage)
+    {
+        if (_mpc == null)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (syncPlayCommandMessage.Data.Command)
+            {
+                case SendCommandType.Unpause:
+                    if (syncPlayCommandMessage.Data.PositionTicks != null)
+                    {
+                        await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
+                    }
+
+                    await _mpc.PlayAsync();
+                    break;
+                case SendCommandType.Pause:
+                    await _mpc.PauseAsync();
+                    if (syncPlayCommandMessage.Data.PositionTicks != null)
+                    {
+                        await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
+                    }
+                    break;
+                case SendCommandType.Stop:
+                    await _mpc.StopAsync();
+                    break;
+                case SendCommandType.Seek:
+                    await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Error handling syncPlay command");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Fatal error handling syncPlay command");
+            throw;
         }
     }
 

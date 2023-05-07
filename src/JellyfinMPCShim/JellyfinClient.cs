@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.Threading.Channels;
 using Flurl;
 using Jellyfin.Sdk;
 using Jellyfin.Sdk.JsonConverters;
@@ -9,7 +10,7 @@ using Websocket.Client;
 
 namespace JellyfinMPCShim;
 
-public class JellyfinClient : IJellyfinClient
+internal class JellyfinClient : IJellyfinClient
 {
     private readonly ILogger<JellyfinClient> _logger;
     private readonly SdkClientSettings _sdkClientSettings;
@@ -20,18 +21,26 @@ public class JellyfinClient : IJellyfinClient
     private readonly IMediaInfoClient _mediaInfoClient;
     private readonly IHlsSegmentClient _hlsSegmentClient;
     private readonly IPlaystateClient _playstateClient;
+    private readonly ISyncPlayClient _syncPlayClient;
     private WebsocketClient? _wsc;
     private CancellationTokenSource? _keepAliveCts;
     private int _timeout = 60;
     private SessionInfo? _session;
-    private IJellyfinMessageHandler? _messageHandler;
+    private readonly List<IJellyfinMessageHandler> _messageHandlers = new();
     private string? _host;
     private CancellationTokenSource? _cts;
+
+    private static readonly JsonSerializerOptions s_serializerOptions = new JsonSerializerOptions
+    {
+        Converters = { new JsonGuidConverter(), new JsonNullableGuidConverter() }
+    };
+
+    private readonly Channel<ResponseMessage> _queue;
 
     public JellyfinClient(ILogger<JellyfinClient> logger, SdkClientSettings sdkClientSettings,
         ISystemClient systemClient, IUserClient userClient, ISessionClient sessionClient,
         IUserLibraryClient userLibraryClient, IMediaInfoClient mediaInfoClient, IHlsSegmentClient hlsSegmentClient,
-        IPlaystateClient playstateClient)
+        IPlaystateClient playstateClient, ISyncPlayClient syncPlayClient)
     {
         _logger = logger;
         _sdkClientSettings = sdkClientSettings;
@@ -42,11 +51,19 @@ public class JellyfinClient : IJellyfinClient
         _mediaInfoClient = mediaInfoClient;
         _hlsSegmentClient = hlsSegmentClient;
         _playstateClient = playstateClient;
+        _syncPlayClient = syncPlayClient;
+        var options = new BoundedChannelOptions(25) { FullMode = BoundedChannelFullMode.Wait };
+        _queue = Channel.CreateBounded<ResponseMessage>(options);
     }
 
 
     public async Task Start(string host, string username, string password, CancellationToken stoppingToken = default)
     {
+        if (_session != null)
+        {
+            throw new InvalidOperationException("JellyfinClient already started");
+        }
+
         _host = host;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
 
@@ -72,7 +89,7 @@ public class JellyfinClient : IJellyfinClient
                 GeneralCommandType.SetSubtitleStreamIndex, GeneralCommandType.Mute, GeneralCommandType.Unmute,
                 GeneralCommandType.SetVolume, GeneralCommandType.DisplayContent, GeneralCommandType.Play,
                 GeneralCommandType.PlayState, GeneralCommandType.PlayNext, GeneralCommandType.PlayMediaSource
-            }, true, cancellationToken: stoppingToken);
+            }, supportsMediaControl: true, supportsSync: true, cancellationToken: stoppingToken);
 
         var uri = new Url(host);
         uri.Scheme = uri.Scheme == "https" ? "wss" : "ws";
@@ -82,8 +99,25 @@ public class JellyfinClient : IJellyfinClient
         });
         _logger.LogDebug("Starting websocke client {uri}", uri);
         _wsc = new WebsocketClient(uri.ToUri());
-        _wsc.MessageReceived.Subscribe(info => HandleWebsockeMessage(info, _cts.Token));
+        _wsc.MessageReceived.Subscribe(info =>
+        {
+            _logger.LogDebug("Websocket message received {text}", info.Text);
+            _queue.Writer.WriteAsync(info, _cts.Token);
+        });
+        _ = Task.Run(async () =>
+        {
+            await HandleWebsockeMessages(_cts.Token);
+        }, _cts.Token);
         await _wsc.Start();
+    }
+
+    private async Task HandleWebsockeMessages(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var info = await _queue.Reader.ReadAsync(cancellationToken);
+            await HandleWebsockeMessage(info, cancellationToken);
+        }
     }
 
     public async Task Stop()
@@ -157,21 +191,36 @@ public class JellyfinClient : IJellyfinClient
         return _playstateClient.ReportPlaybackProgressAsync(playbackProgessInfo);
     }
 
-    public void SetMessageHandler(IJellyfinMessageHandler messageHandler)
+    public void AddMessageHandler(IJellyfinMessageHandler messageHandler)
     {
-        _messageHandler = messageHandler;
+        _messageHandlers.Add(messageHandler);
     }
 
-    private void HandleWebsockeMessage(ResponseMessage info, CancellationToken cancellationToken)
+    public void RemoveMessageHandlen(IJellyfinMessageHandler messageHandler)
     {
-        var serializerOptions = new JsonSerializerOptions
-        {
-            Converters = { new JsonGuidConverter(), new JsonNullableGuidConverter() }
-        };
+        _messageHandlers.Remove(messageHandler);
+    }
 
-        _logger.LogDebug("Websocket message received {text}", info.Text);
+    public Task<IReadOnlyList<GroupInfoDto>> SyncPlayGetGroups()
+    {
+        return _syncPlayClient.SyncPlayGetGroupsAsync();
+    }
 
-        var msg = JsonSerializer.Deserialize<JellyfinWebsockeMessage>(info.Text, serializerOptions);
+    public Task SyncPlayJoinGroup(Guid groupId)
+    {
+        return _syncPlayClient.SyncPlayJoinGroupAsync(new JoinGroupRequestDto { GroupId = groupId });
+    }
+
+    public Task SyncPlayLeaveGroup()
+    {
+        return _syncPlayClient.SyncPlayLeaveGroupAsync();
+    }
+
+    public bool IsConnected { get => _session != null; }
+
+    private async Task HandleWebsockeMessage(ResponseMessage info, CancellationToken cancellationToken)
+    {
+        var msg = JsonSerializer.Deserialize<JellyfinWebsockeMessage>(info.Text, s_serializerOptions);
         if (msg == null)
         {
             return;
@@ -182,7 +231,8 @@ public class JellyfinClient : IJellyfinClient
         switch (msg.MessageType)
         {
             case SessionMessageType.ForceKeepAlive:
-                var fkaMsg = JsonSerializer.Deserialize<JellyfinWebsockeMessage<int>>(info.Text);
+                var fkaMsg = JsonSerializer.Deserialize<JellyfinWebsockeMessage<int>>(info.Text, s_serializerOptions)!;
+                _timeout = fkaMsg.Data;
                 _keepAliveCts?.Cancel();
                 _keepAliveCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 _ = KeepAlive(_keepAliveCts.Token);
@@ -190,13 +240,69 @@ public class JellyfinClient : IJellyfinClient
             case SessionMessageType.KeepAlive:
                 return;
             case SessionMessageType.Play:
-                _messageHandler?.HandlePlay(
-                    JsonSerializer.Deserialize<JellyfinWebsockeMessage<PlayRequest>>(info.Text, serializerOptions)!);
+                var playMessage =
+                    JsonSerializer.Deserialize<JellyfinWebsockeMessage<PlayRequest>>(info.Text, s_serializerOptions)!;
+                foreach (var handler in _messageHandlers)
+                {
+                    try
+                    {
+                        await handler.HandlePlay(playMessage);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.LogCritical(e, "{messageHandler} HandlePlay failed", handler);
+                    }
+                }
+
                 break;
             case SessionMessageType.Playstate:
-                _messageHandler?.HandlePlayState(
-                    JsonSerializer.Deserialize<JellyfinWebsockeMessage<PlaystateRequest>>(info.Text,
-                        serializerOptions)!);
+                var playStateMessage = JsonSerializer.Deserialize<JellyfinWebsockeMessage<PlaystateRequest>>(info.Text,
+                    s_serializerOptions)!;
+                foreach (var handler in _messageHandlers)
+                {
+                    try
+                    {
+                        await handler.HandlePlayState(playStateMessage);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.LogCritical(e, "{messageHandler} HandlePlayState failed", handler);
+                    }
+                }
+
+                break;
+            case SessionMessageType.SyncPlayGroupUpdate:
+                var syncPlayGroupUpdateMessage =
+                    JsonSerializer.Deserialize<JellyfinWebsockeMessage<ObjectGroupUpdate>>(info.Text,
+                        s_serializerOptions)!;
+                foreach (var handler in _messageHandlers)
+                {
+                    try
+                    {
+                        await handler.HandleSyncGroupUpdate(syncPlayGroupUpdateMessage);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.LogCritical(e, "{messageHandler} HandleSyncGroupUpdate failed", handler);
+                    }
+                }
+
+                break;
+            case SessionMessageType.SyncPlayCommand:
+                var syncPlayCommandMessage =
+                    JsonSerializer.Deserialize<JellyfinWebsockeMessage<SendCommand>>(info.Text, s_serializerOptions)!;
+                foreach (var handler in _messageHandlers)
+                {
+                    try
+                    {
+                        await handler.HandleSyncPlayCommand(syncPlayCommandMessage);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.LogCritical(e, "{messageHandler} HandleSyncPlayCommand failed", handler);
+                    }
+                }
+
                 break;
         }
     }

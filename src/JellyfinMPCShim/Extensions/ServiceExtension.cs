@@ -25,6 +25,8 @@ public static class ServiceExtension
             .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
         services.AddHttpClient<IPlaystateClient, PlaystateClient>()
             .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
+        services.AddHttpClient<ISyncPlayClient, SyncPlayClient>()
+            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
         services.AddSingleton<IJellyfinClient, JellyfinClient>();
         return services;
     }

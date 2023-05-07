@@ -14,5 +14,10 @@ public interface IJellyfinClient
     Task ReportPlaybackStopped(PlaybackStopInfo playbackStopInfo);
     Task ReportPlaybackStart(PlaybackStartInfo playbackStartInfo);
     Task ReportPlaybackProgress(PlaybackProgressInfo playbackProgessInfo);
-    void SetMessageHandler(IJellyfinMessageHandler messageHandler);
+    void AddMessageHandler(IJellyfinMessageHandler messageHandler);
+    Task<IReadOnlyList<GroupInfoDto>> SyncPlayGetGroups();
+    bool IsConnected { get; }
+    Task SyncPlayJoinGroup(Guid groupId);
+    Task SyncPlayLeaveGroup();
+    void RemoveMessageHandlen(IJellyfinMessageHandler messageHandler);
 }

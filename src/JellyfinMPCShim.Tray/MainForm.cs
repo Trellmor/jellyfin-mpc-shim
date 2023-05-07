@@ -1,20 +1,24 @@
 ﻿using System.Diagnostics;
+using Jellyfin.Sdk;
 using JellyfinMPCShim.Interfaces;
+using JellyfinMPCShim.Models;
 using JellyfinMPCShim.Tray.Properties;
 using Microsoft.Extensions.Hosting;
 
 namespace JellyfinMPCShim.Tray;
-public partial class MainForm : Form
+public partial class MainForm : Form, IJellyfinMessageHandler
 {
     private readonly IHostApplicationLifetime _hostlLifetime;
     private readonly IJellyfinClient _jellyfinClient;
     private readonly IMpcClient _mpcClient;
     private bool _visible;
+    private Guid? _currentGroup;
 
     public MainForm(IHostApplicationLifetime hostlLifetime, IJellyfinClient jellyfinClient, IMpcClient mpcClient)
     {
         _hostlLifetime = hostlLifetime;
         _jellyfinClient = jellyfinClient;
+        _jellyfinClient.AddMessageHandler(this);
         _mpcClient = mpcClient;
         InitializeComponent();
     }
@@ -145,5 +149,100 @@ public partial class MainForm : Form
         var path = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         path = Path.Combine(path, "JellyfinMPCShim.Tray", "logs");
         Process.Start("explorer.exe", path);
+    }
+
+    private async void trayMenu_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        groupsToolStripMenuItem.DropDownItems.Clear();
+        if (!_jellyfinClient.IsConnected)
+        {
+            return;
+        }
+
+        var groups = await _jellyfinClient.SyncPlayGetGroups();
+        foreach (var group in groups)
+        {
+            var item = new ToolStripMenuItem
+            {
+                Text = group.GroupName, Tag = group, Checked = group.GroupId == _currentGroup
+            };
+            item.Click += SyncPlayGroutItemOnClick;
+            groupsToolStripMenuItem.DropDownItems.Add(item);
+        }
+    }
+
+    private void SyncPlayGroutItemOnClick(object? sender, EventArgs e)
+    {
+        if (_currentGroup != null)
+        {
+            _jellyfinClient.SyncPlayLeaveGroup();
+        }
+
+        if (sender is ToolStripMenuItem item && item.Tag is GroupInfoDto group)
+        {
+            if (!item.Checked)
+            {
+                _jellyfinClient.SyncPlayJoinGroup(group.GroupId);
+            }
+            item.Checked = !item.Checked;
+        }
+    }
+
+    public Task HandlePlay(JellyfinWebsockeMessage<PlayRequest> message)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task HandlePlayState(JellyfinWebsockeMessage<PlaystateRequest> message)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task HandleSyncGroupUpdate(JellyfinWebsockeMessage<ObjectGroupUpdate> syncPlayGroupUpdateMessage)
+    {
+        switch (syncPlayGroupUpdateMessage.Data.Type)
+        {
+            case GroupUpdateType.UserJoined:
+                break;
+            case GroupUpdateType.UserLeft:
+                break;
+            case GroupUpdateType.GroupJoined:
+                _currentGroup = syncPlayGroupUpdateMessage.Data.GroupId;
+                foreach (ToolStripMenuItem item in groupsToolStripMenuItem.DropDownItems)
+                {
+                    if (item.Tag is GroupInfoDto group)
+                    {
+                        item.Checked = group.GroupId == _currentGroup;
+                    }
+                }
+                break;
+            case GroupUpdateType.GroupLeft:
+            case GroupUpdateType.NotInGroup:
+            case GroupUpdateType.GroupDoesNotExist:
+                _currentGroup = null;
+                foreach (ToolStripMenuItem item in groupsToolStripMenuItem.DropDownItems)
+                {
+                    item.Checked = false;
+                }
+                break;
+            case GroupUpdateType.StateUpdate:
+                break;
+            case GroupUpdateType.PlayQueue:
+                break;
+            case GroupUpdateType.CreateGroupDenied:
+                break;
+            case GroupUpdateType.JoinGroupDenied:
+                break;
+            case GroupUpdateType.LibraryAccessDenied:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleSyncPlayCommand(JellyfinWebsockeMessage<SendCommand> syncPlayCommandMessage)
+    {
+        return Task.CompletedTask;
     }
 }

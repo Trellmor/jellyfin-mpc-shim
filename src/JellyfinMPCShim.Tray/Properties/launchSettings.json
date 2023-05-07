@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "JellyfinMPCShim.Tray": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

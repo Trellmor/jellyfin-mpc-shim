@@ -34,6 +34,7 @@ partial class MainForm
         trayMenu = new ContextMenuStrip(components);
         connectionToolStripMenuItem = new ToolStripMenuItem();
         settingsToolStripMenuItem = new ToolStripMenuItem();
+        logsToolStripMenuItem = new ToolStripMenuItem();
         exitToolStripMenuItem = new ToolStripMenuItem();
         groupBoxJellyfin = new GroupBox();
         textBoxJellyfinPassword = new TextBox();
@@ -48,7 +49,7 @@ partial class MainForm
         textBoxMpcPath = new TextBox();
         label5 = new Label();
         label4 = new Label();
-        logsToolStripMenuItem = new ToolStripMenuItem();
+        groupsToolStripMenuItem = new ToolStripMenuItem();
         trayMenu.SuspendLayout();
         groupBoxJellyfin.SuspendLayout();
         groupBoxMpc.SuspendLayout();
@@ -65,9 +66,10 @@ partial class MainForm
         // 
         // trayMenu
         // 
-        trayMenu.Items.AddRange(new ToolStripItem[] { connectionToolStripMenuItem, settingsToolStripMenuItem, logsToolStripMenuItem, exitToolStripMenuItem });
+        trayMenu.Items.AddRange(new ToolStripItem[] { connectionToolStripMenuItem, settingsToolStripMenuItem, groupsToolStripMenuItem, logsToolStripMenuItem, exitToolStripMenuItem });
         trayMenu.Name = "trayMenu";
-        trayMenu.Size = new Size(181, 114);
+        trayMenu.Size = new Size(181, 136);
+        trayMenu.Opening += trayMenu_Opening;
         // 
         // connectionToolStripMenuItem
         // 
@@ -82,6 +84,13 @@ partial class MainForm
         settingsToolStripMenuItem.Size = new Size(180, 22);
         settingsToolStripMenuItem.Text = "Settings";
         settingsToolStripMenuItem.Click += settingsToolStripMenuItem_Click;
+        // 
+        // logsToolStripMenuItem
+        // 
+        logsToolStripMenuItem.Name = "logsToolStripMenuItem";
+        logsToolStripMenuItem.Size = new Size(180, 22);
+        logsToolStripMenuItem.Text = "Logs";
+        logsToolStripMenuItem.Click += logsToolStripMenuItem_Click;
         // 
         // exitToolStripMenuItem
         // 
@@ -213,12 +222,11 @@ partial class MainForm
         label4.TabIndex = 0;
         label4.Text = "Path";
         // 
-        // logsToolStripMenuItem
+        // groupsToolStripMenuItem
         // 
-        logsToolStripMenuItem.Name = "logsToolStripMenuItem";
-        logsToolStripMenuItem.Size = new Size(180, 22);
-        logsToolStripMenuItem.Text = "Logs";
-        logsToolStripMenuItem.Click += logsToolStripMenuItem_Click;
+        groupsToolStripMenuItem.Name = "groupsToolStripMenuItem";
+        groupsToolStripMenuItem.Size = new Size(180, 22);
+        groupsToolStripMenuItem.Text = "Groups";
         // 
         // MainForm
         // 
@@ -263,4 +271,5 @@ partial class MainForm
     private NumericUpDown numericUpDownMpcPort;
     private ToolStripMenuItem connectionToolStripMenuItem;
     private ToolStripMenuItem logsToolStripMenuItem;
+    private ToolStripMenuItem groupsToolStripMenuItem;
 }
