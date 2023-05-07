@@ -54,6 +54,7 @@ var host = Host.CreateDefaultBuilder(args)
         {
             options.TempPath = Path.Combine(Path.GetTempPath(), "jellyfin-mpc-shim-tray");
         });
+        services.AddSingleton<ExceptionLogger>();
     })
     .Build();
 
@@ -63,4 +64,5 @@ settings.InitializeClientSettings(
     version,
     Environment.MachineName,
     $"jellfiin-mpc-shim-tray-{version}-71235034-4346-4A5F-9D82-437066B86654");
+var eh = host.Services.GetService<ExceptionLogger>();
 await host.RunAsync();
