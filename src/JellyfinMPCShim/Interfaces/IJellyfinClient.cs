@@ -22,4 +22,7 @@ public interface IJellyfinClient
     void RemoveMessageHandlen(IJellyfinMessageHandler messageHandler);
     Task SyncPlayBuffering(bool isPlaying, Guid playlistItemId, long positionTicks);
     Task SyncPlayReady(bool isPlaying, Guid playlistItemId, long positionTicks);
+    Task SyncPlayPause();
+    Task SyncPlayUnpause();
+    Task SyncPlayStop();
 }

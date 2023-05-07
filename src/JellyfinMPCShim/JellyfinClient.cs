@@ -238,6 +238,21 @@ internal class JellyfinClient : IJellyfinClient
         });
     }
 
+    public Task SyncPlayPause()
+    {
+        return _syncPlayClient.SyncPlayPauseAsync();
+    }
+
+    public Task SyncPlayUnpause()
+    {
+        return _syncPlayClient.SyncPlayUnpauseAsync();
+    }
+
+    public Task SyncPlayStop()
+    {
+        return _syncPlayClient.SyncPlayStopAsync();
+    }
+
     public bool IsConnected { get => _session != null; }
 
     private async Task HandleWebsockeMessage(ResponseMessage info, CancellationToken cancellationToken)

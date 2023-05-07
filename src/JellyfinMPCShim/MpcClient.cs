@@ -20,6 +20,8 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
     private MPCHomeCinemaObserver? _mpcObserver;
     private string? _path;
     private List<PlaylistItem>? _syncPlaylist;
+    private bool _syncPlay;
+    private State _syncPlayState;
 
     public MpcClient(ILogger<MpcClient> logger, IJellyfinClient jellyfinClient,
         IOptions<MpcClientOptions> mpcClientOptions)
@@ -252,9 +254,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                 break;
             case GroupUpdateType.GroupJoined:
                 _syncPlaylist = null;
+                _syncPlay = true;
                 break;
             case GroupUpdateType.GroupLeft:
                 _syncPlaylist = null;
+                _syncPlay = false;
                 break;
             case GroupUpdateType.StateUpdate:
                 break;
@@ -297,11 +301,20 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
             return;
         }
 
+        _logger.LogDebug("SyncPlayCommand {command}", syncPlayCommandMessage.Data.Command);
+
+        _syncPlay = false; //Don't send sync play updates while we handle the command
         try
         {
             switch (syncPlayCommandMessage.Data.Command)
             {
                 case SendCommandType.Unpause:
+                    if (_syncPlayState == State.Playing)
+                    {
+                        break;
+                    }
+
+                    _syncPlayState = State.Playing;
                     await _jellyfinClient.SyncPlayBuffering(true, syncPlayCommandMessage.Data.PlaylistItemId,
                         syncPlayCommandMessage.Data.PositionTicks ?? 0);
                     if (syncPlayCommandMessage.Data.PositionTicks != null)
@@ -310,24 +323,30 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                     }
 
                     var result = await _mpc.PlayAsync();
-                    await _jellyfinClient.SyncPlayReady(result.Info.State == State.Playing, syncPlayCommandMessage.Data.PlaylistItemId,
+                    await _jellyfinClient.SyncPlayReady(result.Info.State == State.Playing,
+                        syncPlayCommandMessage.Data.PlaylistItemId,
                         result.Info.Position.Ticks);
                     break;
                 case SendCommandType.Pause:
+                    _syncPlayState = State.Paused;
                     await _mpc.PauseAsync();
                     if (syncPlayCommandMessage.Data.PositionTicks != null)
                     {
                         await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
                     }
+
                     break;
                 case SendCommandType.Stop:
+                    _syncPlayState = State.Stoped;
                     await _mpc.StopAsync();
                     break;
                 case SendCommandType.Seek:
-                    await _jellyfinClient.SyncPlayBuffering((_lastState?.State ?? State.Stoped) == State.Playing, syncPlayCommandMessage.Data.PlaylistItemId,
+                    await _jellyfinClient.SyncPlayBuffering((_lastState?.State ?? State.Stoped) == State.Playing,
+                        syncPlayCommandMessage.Data.PlaylistItemId,
                         syncPlayCommandMessage.Data.PositionTicks ?? 0);
                     result = await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
-                    await _jellyfinClient.SyncPlayReady(result.Info.State == State.Playing, syncPlayCommandMessage.Data.PlaylistItemId,
+                    await _jellyfinClient.SyncPlayReady(result.Info.State == State.Playing,
+                        syncPlayCommandMessage.Data.PlaylistItemId,
                         result.Info.Position.Ticks);
                     break;
                 default:
@@ -342,6 +361,10 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
         {
             _logger.LogCritical(ex, "Fatal error handling syncPlay command");
             throw;
+        }
+        finally
+        {
+            _syncPlay = true;
         }
     }
 
@@ -361,6 +384,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                     ? TimeSpan.FromMilliseconds(_lastState.PositionMillisec).Ticks
                     : null
             });
+        }
+
+        if (_syncPlay)
+        {
+            await _jellyfinClient.SyncPlayStop();
         }
     }
 
@@ -413,6 +441,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                         };
                         _media = null;
                         await _jellyfinClient.ReportPlaybackStopped(playbackStopInfo);
+                        if (_syncPlay && _syncPlayState != State.Stoped)
+                        {
+                            _syncPlayState = State.Stoped;
+                            await _jellyfinClient.SyncPlayStop();
+                        }
                         break;
                     case State.Playing:
                         var playbackStartInfo = new PlaybackStartInfo
@@ -430,9 +463,20 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                             ItemId = _media.Video.Id,
                         };
                         await _jellyfinClient.ReportPlaybackStart(playbackStartInfo);
+                        if (_syncPlay && _syncPlayState != State.Playing)
+                        {
+                            _syncPlayState = State.Playing;
+                            await _jellyfinClient.SyncPlayUnpause();
+                        }
+
                         break;
                     case State.Paused:
                         await _jellyfinClient.ReportPlaybackProgress(GetProgessInfo(args.NewInfo));
+                        if (_syncPlay && _syncPlayState != State.Paused)
+                        {
+                            _syncPlayState = State.Paused;
+                            await _jellyfinClient.SyncPlayPause();
+                        }
                         break;
                     case State.None:
                         break;
