@@ -216,6 +216,28 @@ internal class JellyfinClient : IJellyfinClient
         return _syncPlayClient.SyncPlayLeaveGroupAsync();
     }
 
+    public Task SyncPlayBuffering(bool isPlaying, Guid playlistItemId, long positionTicks)
+    {
+        return _syncPlayClient.SyncPlayBufferingAsync(new BufferRequestDto
+        {
+            IsPlaying = isPlaying,
+            PlaylistItemId = playlistItemId,
+            PositionTicks = positionTicks,
+            When = DateTimeOffset.Now
+        });
+    }
+
+    public Task SyncPlayReady(bool isPlaying, Guid playlistItemId, long positionTicks)
+    {
+        return _syncPlayClient.SyncPlayReadyAsync(new ReadyRequestDto
+        {
+            IsPlaying = isPlaying,
+            PlaylistItemId = playlistItemId,
+            PositionTicks = positionTicks,
+            When = DateTimeOffset.Now
+        });
+    }
+
     public bool IsConnected { get => _session != null; }
 
     private async Task HandleWebsockeMessage(ResponseMessage info, CancellationToken cancellationToken)

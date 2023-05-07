@@ -95,7 +95,7 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
         }
     }
 
-    private async Task PlayMedia(Media media, long startPosition, bool startPaused = false)
+    private async Task<Result> PlayMedia(Media media, long startPosition, bool startPaused = false)
     {
         _ = _mpc ?? throw new InvalidOperationException("MpcClient has not been started");
 
@@ -141,11 +141,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
             var result = await _mpc.OpenFileAsync(filename);
             if (startPaused)
             {
-                await _mpc.PauseAsync();
+                result = await _mpc.PauseAsync();
             }
             else
             {
-                await _mpc.PlayAsync();
+                result = await _mpc.PlayAsync();
             }
 
             if (startPosition > 0)
@@ -155,6 +155,8 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                 pos = TimeSpan.FromSeconds(Math.Round(pos.TotalSeconds));
                 result = await _mpc.SetPosition(pos);
             }
+
+            return result;
         }
         catch (Exception ex)
         {
@@ -163,7 +165,7 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
         }
     }
 
-    private async Task SetPosition(long startPosition)
+    private async Task<Result> SetPosition(long startPosition)
     {
         _ = _mpc ?? throw new InvalidOperationException("MpcClient has not been started");
 
@@ -175,11 +177,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                 pos.TotalMilliseconds < _lastState.Position.TotalMilliseconds + 5000)
             {
                 //Wenn die Position innerhalb von 5 sek liegt, kein Seek machen
-                return;
+                return new Result { Info = _lastState };
             }
         }
 
-        await _mpc.SetPosition(pos);
+        return await _mpc.SetPosition(pos);
     }
 
     public async Task HandlePlayState(JellyfinWebsockeMessage<PlaystateRequest> message)
@@ -261,9 +263,15 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                 if (data != null)
                 {
                     _syncPlaylist = data.Playlist;
+                    var playlistItem = _syncPlaylist[data.PlayingItemIndex];
+                    await _jellyfinClient.SyncPlayBuffering(data.IsPlaying, playlistItem.PlaylistItemId,
+                        data.StartPositionTicks);
                     var media = new Media(_jellyfinClient, data.Playlist.Select(i => i.ItemId), data.PlayingItemIndex,
                         0, 0, null);
-                    await PlayMedia(media, data.StartPositionTicks, !data.IsPlaying);
+                    var result = await PlayMedia(media, data.StartPositionTicks, !data.IsPlaying);
+                    await _jellyfinClient.SyncPlayReady(result.Info.State == State.Playing, playlistItem.PlaylistItemId,
+                        result.Info.Position.Ticks);
+
                 }
 
                 break;
@@ -294,12 +302,16 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
             switch (syncPlayCommandMessage.Data.Command)
             {
                 case SendCommandType.Unpause:
+                    await _jellyfinClient.SyncPlayBuffering(true, syncPlayCommandMessage.Data.PlaylistItemId,
+                        syncPlayCommandMessage.Data.PositionTicks ?? 0);
                     if (syncPlayCommandMessage.Data.PositionTicks != null)
                     {
                         await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
                     }
 
-                    await _mpc.PlayAsync();
+                    var result = await _mpc.PlayAsync();
+                    await _jellyfinClient.SyncPlayReady(result.Info.State == State.Playing, syncPlayCommandMessage.Data.PlaylistItemId,
+                        result.Info.Position.Ticks);
                     break;
                 case SendCommandType.Pause:
                     await _mpc.PauseAsync();
@@ -312,7 +324,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                     await _mpc.StopAsync();
                     break;
                 case SendCommandType.Seek:
-                    await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
+                    await _jellyfinClient.SyncPlayBuffering((_lastState?.State ?? State.Stoped) == State.Playing, syncPlayCommandMessage.Data.PlaylistItemId,
+                        syncPlayCommandMessage.Data.PositionTicks ?? 0);
+                    result = await SetPosition(syncPlayCommandMessage.Data.PositionTicks ?? 0);
+                    await _jellyfinClient.SyncPlayReady(result.Info.State == State.Playing, syncPlayCommandMessage.Data.PlaylistItemId,
+                        result.Info.Position.Ticks);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
