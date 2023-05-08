@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.Windows.Forms.VisualStyles;
+using FontAwesome.Sharp;
 using Jellyfin.Sdk;
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
@@ -21,6 +23,11 @@ public partial class MainForm : Form, IJellyfinMessageHandler
         _jellyfinClient.AddMessageHandler(this);
         _mpcClient = mpcClient;
         InitializeComponent();
+        connectionToolStripMenuItem.Image = IconChar.Cloud.ToBitmap(width: 16, height: 16, color: Color.Black);
+        settingsToolStripMenuItem.Image = IconChar.Gear.ToBitmap(width: 16, height: 16, color: Color.Black);
+        groupsToolStripMenuItem.Image = IconChar.UserGroup.ToBitmap(width: 16, height: 16, color: Color.Black);
+        logsToolStripMenuItem.Image = IconChar.FileLines.ToBitmap(width: 16, height: 16, color: Color.Black);
+        exitToolStripMenuItem.Image = IconChar.Close.ToBitmap(width: 16, height: 16, color: Color.Black);
     }
 
     private async void MainForm_Load(object sender, EventArgs e)
@@ -51,7 +58,7 @@ public partial class MainForm : Form, IJellyfinMessageHandler
         catch (Exception ex)
         {
             ShowForm();
-            MessageBox.Show($"Error connectiong to jellyfin\r\r{ex.Message}", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Error connection to Jellyfin\r\r{ex.Message}", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
@@ -164,7 +171,9 @@ public partial class MainForm : Form, IJellyfinMessageHandler
         {
             var item = new ToolStripMenuItem
             {
-                Text = group.GroupName, Tag = group, Checked = group.GroupId == _currentGroup
+                Text = group.GroupName,
+                Tag = group,
+                Checked = group.GroupId == _currentGroup
             };
             item.Click += SyncPlayGroutItemOnClick;
             groupsToolStripMenuItem.DropDownItems.Add(item);
@@ -244,5 +253,18 @@ public partial class MainForm : Form, IJellyfinMessageHandler
     public Task HandleSyncPlayCommand(JellyfinWebsockeMessage<SendCommand> syncPlayCommandMessage)
     {
         return Task.CompletedTask;
+    }
+
+    private void buttonSelectMpc_Click(object sender, EventArgs e)
+    {
+        using var ofd = new OpenFileDialog();
+        ofd.CheckFileExists = true;
+        ofd.FileName = textBoxMpcPath.Text;
+        ofd.InitialDirectory = !string.IsNullOrWhiteSpace(textBoxMpcPath.Text) ? Path.GetDirectoryName(textBoxMpcPath.Text) : null;
+        ofd.Filter = "exe|*.exe";
+        if (ofd.ShowDialog() == DialogResult.OK)
+        {
+            textBoxMpcPath.Text = ofd.FileName;
+        }
     }
 }

@@ -1,4 +1,7 @@
-﻿namespace JellyfinMPCShim.Tray;
+﻿using FontAwesome.Sharp;
+using Icon = System.Drawing.Icon;
+
+namespace JellyfinMPCShim.Tray;
 
 partial class MainForm
 {
@@ -34,6 +37,7 @@ partial class MainForm
         trayMenu = new ContextMenuStrip(components);
         connectionToolStripMenuItem = new ToolStripMenuItem();
         settingsToolStripMenuItem = new ToolStripMenuItem();
+        groupsToolStripMenuItem = new ToolStripMenuItem();
         logsToolStripMenuItem = new ToolStripMenuItem();
         exitToolStripMenuItem = new ToolStripMenuItem();
         groupBoxJellyfin = new GroupBox();
@@ -43,13 +47,13 @@ partial class MainForm
         label3 = new Label();
         label2 = new Label();
         label1 = new Label();
-        buttonSave = new Button();
         groupBoxMpc = new GroupBox();
+        buttonSelectMpc = new IconButton();
         numericUpDownMpcPort = new NumericUpDown();
         textBoxMpcPath = new TextBox();
         label5 = new Label();
         label4 = new Label();
-        groupsToolStripMenuItem = new ToolStripMenuItem();
+        buttonSave = new IconButton();
         trayMenu.SuspendLayout();
         groupBoxJellyfin.SuspendLayout();
         groupBoxMpc.SuspendLayout();
@@ -68,13 +72,13 @@ partial class MainForm
         // 
         trayMenu.Items.AddRange(new ToolStripItem[] { connectionToolStripMenuItem, settingsToolStripMenuItem, groupsToolStripMenuItem, logsToolStripMenuItem, exitToolStripMenuItem });
         trayMenu.Name = "trayMenu";
-        trayMenu.Size = new Size(181, 136);
+        trayMenu.Size = new Size(181, 137);
         trayMenu.Opening += trayMenu_Opening;
         // 
         // connectionToolStripMenuItem
         // 
         connectionToolStripMenuItem.Name = "connectionToolStripMenuItem";
-        connectionToolStripMenuItem.Size = new Size(180, 22);
+        connectionToolStripMenuItem.Size = new Size(89, 20);
         connectionToolStripMenuItem.Text = "Connection";
         connectionToolStripMenuItem.Visible = false;
         // 
@@ -84,6 +88,12 @@ partial class MainForm
         settingsToolStripMenuItem.Size = new Size(180, 22);
         settingsToolStripMenuItem.Text = "Settings";
         settingsToolStripMenuItem.Click += settingsToolStripMenuItem_Click;
+        // 
+        // groupsToolStripMenuItem
+        // 
+        groupsToolStripMenuItem.Name = "groupsToolStripMenuItem";
+        groupsToolStripMenuItem.Size = new Size(180, 22);
+        groupsToolStripMenuItem.Text = "Groups";
         // 
         // logsToolStripMenuItem
         // 
@@ -110,7 +120,7 @@ partial class MainForm
         groupBoxJellyfin.Controls.Add(label1);
         groupBoxJellyfin.Location = new Point(12, 12);
         groupBoxJellyfin.Name = "groupBoxJellyfin";
-        groupBoxJellyfin.Size = new Size(776, 128);
+        groupBoxJellyfin.Size = new Size(514, 128);
         groupBoxJellyfin.TabIndex = 1;
         groupBoxJellyfin.TabStop = false;
         groupBoxJellyfin.Text = "Jellyfin";
@@ -120,21 +130,21 @@ partial class MainForm
         textBoxJellyfinPassword.Location = new Point(83, 80);
         textBoxJellyfinPassword.Name = "textBoxJellyfinPassword";
         textBoxJellyfinPassword.PasswordChar = '*';
-        textBoxJellyfinPassword.Size = new Size(360, 23);
+        textBoxJellyfinPassword.Size = new Size(425, 23);
         textBoxJellyfinPassword.TabIndex = 5;
         // 
         // textBoxJellyfinUsername
         // 
         textBoxJellyfinUsername.Location = new Point(83, 51);
         textBoxJellyfinUsername.Name = "textBoxJellyfinUsername";
-        textBoxJellyfinUsername.Size = new Size(360, 23);
+        textBoxJellyfinUsername.Size = new Size(425, 23);
         textBoxJellyfinUsername.TabIndex = 4;
         // 
         // textBoxJellyfinHost
         // 
         textBoxJellyfinHost.Location = new Point(83, 22);
         textBoxJellyfinHost.Name = "textBoxJellyfinHost";
-        textBoxJellyfinHost.Size = new Size(360, 23);
+        textBoxJellyfinHost.Size = new Size(425, 23);
         textBoxJellyfinHost.TabIndex = 3;
         // 
         // label3
@@ -164,30 +174,34 @@ partial class MainForm
         label1.TabIndex = 0;
         label1.Text = "Server";
         // 
-        // buttonSave
-        // 
-        buttonSave.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-        buttonSave.Location = new Point(713, 415);
-        buttonSave.Name = "buttonSave";
-        buttonSave.Size = new Size(75, 23);
-        buttonSave.TabIndex = 2;
-        buttonSave.Text = "Save";
-        buttonSave.UseVisualStyleBackColor = true;
-        buttonSave.Click += buttonSave_Click;
-        // 
         // groupBoxMpc
         // 
         groupBoxMpc.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        groupBoxMpc.Controls.Add(buttonSelectMpc);
         groupBoxMpc.Controls.Add(numericUpDownMpcPort);
         groupBoxMpc.Controls.Add(textBoxMpcPath);
         groupBoxMpc.Controls.Add(label5);
         groupBoxMpc.Controls.Add(label4);
         groupBoxMpc.Location = new Point(12, 146);
         groupBoxMpc.Name = "groupBoxMpc";
-        groupBoxMpc.Size = new Size(776, 100);
+        groupBoxMpc.Size = new Size(514, 100);
         groupBoxMpc.TabIndex = 3;
         groupBoxMpc.TabStop = false;
         groupBoxMpc.Text = "MPC";
+        // 
+        // buttonSelectMpc
+        // 
+        buttonSelectMpc.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        buttonSelectMpc.IconChar = IconChar.FolderOpen;
+        buttonSelectMpc.IconColor = Color.Black;
+        buttonSelectMpc.IconFont = IconFont.Auto;
+        buttonSelectMpc.IconSize = 16;
+        buttonSelectMpc.Location = new Point(480, 22);
+        buttonSelectMpc.Name = "buttonSelectMpc";
+        buttonSelectMpc.Size = new Size(28, 23);
+        buttonSelectMpc.TabIndex = 3;
+        buttonSelectMpc.UseVisualStyleBackColor = true;
+        buttonSelectMpc.Click += buttonSelectMpc_Click;
         // 
         // numericUpDownMpcPort
         // 
@@ -195,13 +209,13 @@ partial class MainForm
         numericUpDownMpcPort.Maximum = new decimal(new int[] { 65535, 0, 0, 0 });
         numericUpDownMpcPort.Name = "numericUpDownMpcPort";
         numericUpDownMpcPort.Size = new Size(82, 23);
-        numericUpDownMpcPort.TabIndex = 3;
+        numericUpDownMpcPort.TabIndex = 4;
         // 
         // textBoxMpcPath
         // 
         textBoxMpcPath.Location = new Point(83, 22);
         textBoxMpcPath.Name = "textBoxMpcPath";
-        textBoxMpcPath.Size = new Size(360, 23);
+        textBoxMpcPath.Size = new Size(391, 23);
         textBoxMpcPath.TabIndex = 2;
         // 
         // label5
@@ -222,19 +236,27 @@ partial class MainForm
         label4.TabIndex = 0;
         label4.Text = "Path";
         // 
-        // groupsToolStripMenuItem
+        // buttonSave
         // 
-        groupsToolStripMenuItem.Name = "groupsToolStripMenuItem";
-        groupsToolStripMenuItem.Size = new Size(180, 22);
-        groupsToolStripMenuItem.Text = "Groups";
+        buttonSave.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+        buttonSave.IconChar = IconChar.FloppyDisk;
+        buttonSave.IconColor = Color.Black;
+        buttonSave.IconFont = IconFont.Auto;
+        buttonSave.IconSize = 16;
+        buttonSave.Location = new Point(498, 252);
+        buttonSave.Name = "buttonSave";
+        buttonSave.Size = new Size(28, 23);
+        buttonSave.TabIndex = 6;
+        buttonSave.UseVisualStyleBackColor = true;
+        buttonSave.Click += buttonSave_Click;
         // 
         // MainForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(800, 450);
-        Controls.Add(groupBoxMpc);
+        ClientSize = new Size(538, 287);
         Controls.Add(buttonSave);
+        Controls.Add(groupBoxMpc);
         Controls.Add(groupBoxJellyfin);
         Icon = (Icon)resources.GetObject("$this.Icon");
         Name = "MainForm";
@@ -263,7 +285,6 @@ partial class MainForm
     private Label label3;
     private Label label2;
     private Label label1;
-    private Button buttonSave;
     private GroupBox groupBoxMpc;
     private TextBox textBoxMpcPath;
     private Label label5;
@@ -272,4 +293,6 @@ partial class MainForm
     private ToolStripMenuItem connectionToolStripMenuItem;
     private ToolStripMenuItem logsToolStripMenuItem;
     private ToolStripMenuItem groupsToolStripMenuItem;
+    private FontAwesome.Sharp.IconButton buttonSelectMpc;
+    private FontAwesome.Sharp.IconButton buttonSave;
 }
