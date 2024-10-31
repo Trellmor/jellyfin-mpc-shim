@@ -1,5 +1,4 @@
 ﻿using System.Text.Json.Serialization;
-using Jellyfin.Sdk;
 
 namespace JellyfinMPCShim.Models;
 

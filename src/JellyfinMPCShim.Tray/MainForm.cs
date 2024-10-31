@@ -1,7 +1,5 @@
 ﻿using System.Diagnostics;
-using System.Windows.Forms.VisualStyles;
 using FontAwesome.Sharp;
-using Jellyfin.Sdk;
 using Jellyfin.Sdk.Generated.Models;
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
