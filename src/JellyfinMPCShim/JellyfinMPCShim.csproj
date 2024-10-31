@@ -16,8 +16,4 @@
     <PackageReference Include="Websocket.Client" Version="4.6.1" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\lib\jellyfin-sdk-csharp\src\Jellyfin.Sdk.csproj" />
-  </ItemGroup>
-
 </Project>
