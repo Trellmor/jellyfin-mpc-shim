@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <UseWindowsForms>true</UseWindowsForms>
         <ImplicitUsings>enable</ImplicitUsings>
-        <AssemblyVersion>0.1.0</AssemblyVersion>
+        <AssemblyVersion>0.2.0</AssemblyVersion>
         <ApplicationIcon>jellyfin.ico</ApplicationIcon>
     </PropertyGroup>
 
