@@ -375,6 +375,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
         }
     }
 
+    public Task HandleStop()
+    {
+        return Task.CompletedTask;
+    }
+
     private async void MpcObserverOnError(object sender, ExceptionEventArgs e)
     {
         var media = _media;

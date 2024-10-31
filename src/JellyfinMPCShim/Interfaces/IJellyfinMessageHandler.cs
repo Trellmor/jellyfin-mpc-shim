@@ -9,4 +9,5 @@ public interface IJellyfinMessageHandler
     Task HandlePlayState(JellyfinWebsockeMessage<PlaystateRequest> message);
     Task HandleSyncGroupUpdate(JellyfinWebsockeMessage<GroupUpdate> syncPlayGroupUpdateMessage);
     Task HandleSyncPlayCommand(JellyfinWebsockeMessage<SendCommand> syncPlayCommandMessage);
+    Task HandleStop();
 }

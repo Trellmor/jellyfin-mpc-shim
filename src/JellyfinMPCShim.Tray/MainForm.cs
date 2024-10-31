@@ -110,9 +110,7 @@ public partial class MainForm : Form, IJellyfinMessageHandler
 
     private async void exitToolStripMenuItem_Click(object sender, EventArgs e)
     {
-        await _jellyfinClient.Stop();
-        _hostlLifetime.StopApplication();
-    }
+        await _jellyfinClient.Stop();    }
 
     private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
     {
@@ -258,6 +256,13 @@ public partial class MainForm : Form, IJellyfinMessageHandler
 
     public Task HandleSyncPlayCommand(JellyfinWebsockeMessage<SendCommand> syncPlayCommandMessage)
     {
+        return Task.CompletedTask;
+    }
+
+    public Task HandleStop()
+    {
+        //Shutdown application when Jellfin connection is stopped
+        _hostlLifetime.StopApplication();
         return Task.CompletedTask;
     }
 

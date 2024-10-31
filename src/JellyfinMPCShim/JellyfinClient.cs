@@ -105,6 +105,14 @@ internal class JellyfinClient : IJellyfinClient
             _logger.LogDebug("Websocket message received {text}", info.Text);
             _queue.Writer.WriteAsync(info, _cts.Token);
         });
+        _wsc.DisconnectionHappened.Subscribe(info =>
+        {
+            _logger.LogWarning("Websocket disconnection happened {type} {exception}", info.Type, info.Exception);
+            if (IsConnected && info.Type != DisconnectionType.Exit)
+            {
+                _ = Stop();
+            }
+        });
         _ = Task.Run(async () =>
         {
             await HandleWebsockeMessages(_cts.Token);
@@ -148,6 +156,17 @@ internal class JellyfinClient : IJellyfinClient
         {
             _session = null;
             _jellyfinSdkSettings.SetAccessToken(null);
+            foreach (var handler in _messageHandlers)
+            {
+                try
+                {
+                    await handler.HandleStop();
+                }
+                catch (Exception e)
+                {
+                    _logger.LogCritical(e, "{messageHandler} HandlePlay failed", handler);
+                }
+            }
         }
     }
 
