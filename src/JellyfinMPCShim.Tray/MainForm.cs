@@ -2,8 +2,10 @@
 using System.Windows.Forms.VisualStyles;
 using FontAwesome.Sharp;
 using Jellyfin.Sdk;
+using Jellyfin.Sdk.Generated.Models;
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
+using JellyfinMPCShim.Models.WebsocketData;
 using JellyfinMPCShim.Tray.Properties;
 using Microsoft.Extensions.Hosting;
 
@@ -167,6 +169,10 @@ public partial class MainForm : Form, IJellyfinMessageHandler
         }
 
         var groups = await _jellyfinClient.SyncPlayGetGroups();
+        if (groups == null)
+        {
+            return;
+        }
         foreach (var group in groups)
         {
             var item = new ToolStripMenuItem
@@ -189,9 +195,9 @@ public partial class MainForm : Form, IJellyfinMessageHandler
 
         if (sender is ToolStripMenuItem item && item.Tag is GroupInfoDto group)
         {
-            if (!item.Checked)
+            if (!item.Checked && group.GroupId != null)
             {
-                _jellyfinClient.SyncPlayJoinGroup(group.GroupId);
+                _jellyfinClient.SyncPlayJoinGroup(group.GroupId.Value);
             }
             item.Checked = !item.Checked;
         }
@@ -207,7 +213,7 @@ public partial class MainForm : Form, IJellyfinMessageHandler
         return Task.CompletedTask;
     }
 
-    public Task HandleSyncGroupUpdate(JellyfinWebsockeMessage<ObjectGroupUpdate> syncPlayGroupUpdateMessage)
+    public Task HandleSyncGroupUpdate(JellyfinWebsockeMessage<GroupUpdate> syncPlayGroupUpdateMessage)
     {
         switch (syncPlayGroupUpdateMessage.Data.Type)
         {

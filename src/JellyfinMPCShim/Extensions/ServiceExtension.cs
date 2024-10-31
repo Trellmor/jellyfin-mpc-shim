@@ -2,31 +2,23 @@
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Kiota.Abstractions;
+using Microsoft.Kiota.Abstractions.Authentication;
 
 namespace JellyfinMPCShim.Extensions;
 
 public static class ServiceExtension
 {
 
-    public static IServiceCollection AddJellyfin(this IServiceCollection services, Func<IServiceProvider, HttpMessageHandler> configureHttpHandler)
+    public static IServiceCollection AddJellyfin(this IServiceCollection services, string httpClientName = "Default")
     {
-        services.AddSingleton<SdkClientSettings>();
-        services.AddHttpClient<ISystemClient, SystemClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
-        services.AddHttpClient<IUserClient, UserClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
-        services.AddHttpClient<ISessionClient, SessionClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
-        services.AddHttpClient<IUserLibraryClient, UserLibraryClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
-        services.AddHttpClient<IMediaInfoClient, MediaInfoClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
-        services.AddHttpClient<IHlsSegmentClient, HlsSegmentClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
-        services.AddHttpClient<IPlaystateClient, PlaystateClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
-        services.AddHttpClient<ISyncPlayClient, SyncPlayClient>()
-            .ConfigurePrimaryHttpMessageHandler(configureHttpHandler);
+        services.AddSingleton<JellyfinSdkSettings>();
+        services.AddSingleton<IAuthenticationProvider, JellyfinAuthenticationProvider>();
+        services.AddSingleton<JellyfinApiClient>();
+        services.AddSingleton<IRequestAdapter, JellyfinRequestAdapter>(s => new JellyfinRequestAdapter(
+            s.GetRequiredService<IAuthenticationProvider>(),
+            s.GetRequiredService<JellyfinSdkSettings>(),
+            s.GetRequiredService<IHttpClientFactory>().CreateClient(httpClientName)));
         services.AddSingleton<IJellyfinClient, JellyfinClient>();
         return services;
     }

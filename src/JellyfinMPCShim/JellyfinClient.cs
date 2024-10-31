@@ -1,10 +1,12 @@
-﻿using System.Text.Json;
+﻿using System.Net.WebSockets;
+using System.Text.Json;
 using System.Threading.Channels;
 using Flurl;
 using Jellyfin.Sdk;
-using Jellyfin.Sdk.JsonConverters;
+using Jellyfin.Sdk.Generated.Models;
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
+using JellyfinMPCShim.Models.WebsocketData;
 using Microsoft.Extensions.Logging;
 using Websocket.Client;
 
@@ -13,19 +15,11 @@ namespace JellyfinMPCShim;
 internal class JellyfinClient : IJellyfinClient
 {
     private readonly ILogger<JellyfinClient> _logger;
-    private readonly SdkClientSettings _sdkClientSettings;
-    private readonly ISystemClient _systemClient;
-    private readonly IUserClient _userClient;
-    private readonly ISessionClient _sessionClient;
-    private readonly IUserLibraryClient _userLibraryClient;
-    private readonly IMediaInfoClient _mediaInfoClient;
-    private readonly IHlsSegmentClient _hlsSegmentClient;
-    private readonly IPlaystateClient _playstateClient;
-    private readonly ISyncPlayClient _syncPlayClient;
+    private readonly JellyfinSdkSettings _jellyfinSdkSettings;
+    private readonly JellyfinApiClient _jellyfinApiClient;
     private WebsocketClient? _wsc;
     private CancellationTokenSource? _keepAliveCts;
     private int _timeout = 60;
-    private SessionInfo? _session;
     private readonly List<IJellyfinMessageHandler> _messageHandlers = new();
     private string? _host;
     private CancellationTokenSource? _cts;
@@ -36,22 +30,14 @@ internal class JellyfinClient : IJellyfinClient
     };
 
     private readonly Channel<ResponseMessage> _queue;
+    private SessionInfoDto? _session;
 
-    public JellyfinClient(ILogger<JellyfinClient> logger, SdkClientSettings sdkClientSettings,
-        ISystemClient systemClient, IUserClient userClient, ISessionClient sessionClient,
-        IUserLibraryClient userLibraryClient, IMediaInfoClient mediaInfoClient, IHlsSegmentClient hlsSegmentClient,
-        IPlaystateClient playstateClient, ISyncPlayClient syncPlayClient)
+    public JellyfinClient(ILogger<JellyfinClient> logger, JellyfinSdkSettings jellyfinSdkSettings,
+        JellyfinApiClient jellyfinApiClient)
     {
         _logger = logger;
-        _sdkClientSettings = sdkClientSettings;
-        _systemClient = systemClient;
-        _userClient = userClient;
-        _sessionClient = sessionClient;
-        _userLibraryClient = userLibraryClient;
-        _mediaInfoClient = mediaInfoClient;
-        _hlsSegmentClient = hlsSegmentClient;
-        _playstateClient = playstateClient;
-        _syncPlayClient = syncPlayClient;
+        _jellyfinSdkSettings = jellyfinSdkSettings;
+        _jellyfinApiClient = jellyfinApiClient;
         var options = new BoundedChannelOptions(25) { FullMode = BoundedChannelFullMode.Wait };
         _queue = Channel.CreateBounded<ResponseMessage>(options);
     }
@@ -67,36 +53,51 @@ internal class JellyfinClient : IJellyfinClient
         _host = host;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
 
-        _sdkClientSettings.BaseUrl = host;
-        _logger.LogDebug("Connecting  to {host}", _sdkClientSettings.BaseUrl);
-        var systemInfo = await _systemClient.GetPublicSystemInfoAsync(stoppingToken);
-        _logger.LogDebug("Connected to {host} {name} {version}", _sdkClientSettings.BaseUrl, systemInfo.ServerName,
+        _jellyfinSdkSettings.SetServerUrl(host);
+        _logger.LogDebug("Connecting  to {host}", _jellyfinSdkSettings.ServerUrl);
+        var systemInfo = await _jellyfinApiClient.System.Info.Public.GetAsync(cancellationToken: stoppingToken);
+        _logger.LogDebug("Connected to {host} {name} {version}", _jellyfinSdkSettings.ServerUrl, systemInfo.ServerName,
             systemInfo.Version);
-        var authenticationResult = await _userClient.AuthenticateUserByNameAsync(
-            new AuthenticateUserByName { Username = username, Pw = password },
-            stoppingToken);
+        var authenticationResult = await _jellyfinApiClient.Users.AuthenticateByName.PostAsync(
+            new AuthenticateUserByName { Username = username, Pw = password }, cancellationToken: stoppingToken);
         _session = authenticationResult.SessionInfo;
-        _sdkClientSettings.AccessToken = authenticationResult.AccessToken;
+        _jellyfinSdkSettings.SetAccessToken(authenticationResult.AccessToken);
         _logger.LogDebug("Logged in as {name} (ID {id})", authenticationResult.User.Name, authenticationResult.User.Id);
-        await _sessionClient.PostCapabilitiesAsync(_session.Id, new[] { "Video" },
-            new[]
+        await _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
+        {
+            PlayableMediaTypes = new List<MediaType?> { MediaType.Video },
+            SupportedCommands = new List<GeneralCommandType?>
             {
-                GeneralCommandType.MoveUp, GeneralCommandType.MoveDown, GeneralCommandType.MoveLeft,
-                GeneralCommandType.MoveRight, GeneralCommandType.Select, GeneralCommandType.Back,
-                GeneralCommandType.ToggleFullscreen, GeneralCommandType.GoHome, GeneralCommandType.GoToSettings,
-                GeneralCommandType.TakeScreenshot, GeneralCommandType.VolumeUp, GeneralCommandType.VolumeDown,
-                GeneralCommandType.ToggleMute, GeneralCommandType.SetAudioStreamIndex,
-                GeneralCommandType.SetSubtitleStreamIndex, GeneralCommandType.Mute, GeneralCommandType.Unmute,
-                GeneralCommandType.SetVolume, GeneralCommandType.DisplayContent, GeneralCommandType.Play,
-                GeneralCommandType.PlayState, GeneralCommandType.PlayNext, GeneralCommandType.PlayMediaSource
-            }, supportsMediaControl: true, supportsSync: true, cancellationToken: stoppingToken);
+                GeneralCommandType.MoveUp,
+                GeneralCommandType.MoveDown,
+                GeneralCommandType.MoveLeft,
+                GeneralCommandType.MoveRight,
+                GeneralCommandType.Select,
+                GeneralCommandType.Back,
+                GeneralCommandType.ToggleFullscreen,
+                GeneralCommandType.GoHome,
+                GeneralCommandType.GoToSettings,
+                GeneralCommandType.TakeScreenshot,
+                GeneralCommandType.VolumeUp,
+                GeneralCommandType.VolumeDown,
+                GeneralCommandType.ToggleMute,
+                GeneralCommandType.SetAudioStreamIndex,
+                GeneralCommandType.SetSubtitleStreamIndex,
+                GeneralCommandType.Mute,
+                GeneralCommandType.Unmute,
+                GeneralCommandType.SetVolume,
+                GeneralCommandType.DisplayContent,
+                GeneralCommandType.Play,
+                GeneralCommandType.PlayState,
+                GeneralCommandType.PlayNext,
+                GeneralCommandType.PlayMediaSource
+            },
+            SupportsMediaControl = true
+        });
 
         var uri = new Url(host);
         uri.Scheme = uri.Scheme == "https" ? "wss" : "ws";
-        uri.AppendPathSegment("socket").SetQueryParams(new
-        {
-            api_key = _sdkClientSettings.AccessToken, device_id = _sdkClientSettings.DeviceId
-        });
+        uri.AppendPathSegment("socket").SetQueryParams(new { api_key = _jellyfinSdkSettings.AccessToken });
         _logger.LogDebug("Starting websocke client {uri}", uri);
         _wsc = new WebsocketClient(uri.ToUri());
         _wsc.MessageReceived.Subscribe(info =>
@@ -116,50 +117,62 @@ internal class JellyfinClient : IJellyfinClient
         while (!cancellationToken.IsCancellationRequested)
         {
             var info = await _queue.Reader.ReadAsync(cancellationToken);
-            await HandleWebsockeMessage(info, cancellationToken);
+            try
+            {
+                await HandleWebsockeMessage(info, cancellationToken);
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Error handling websocket message {type}, {text}", info.MessageType, info.Text);
+            }
         }
     }
 
     public async Task Stop()
     {
-        _cts?.Cancel();
+        if (_cts != null)
+        {
+            await _cts.CancelAsync();
+        }
+
         _wsc?.Dispose();
         _wsc = null;
         try
         {
             if (_session != null)
             {
-                await _sessionClient.ReportSessionEndedAsync();
+                await _jellyfinApiClient.Sessions.Logout.PostAsync();
             }
         }
         finally
         {
             _session = null;
-            _sdkClientSettings.AccessToken = null;
+            _jellyfinSdkSettings.SetAccessToken(null);
         }
     }
 
-    public Task<BaseItemDto> GetItem(Guid itemId)
+    public Task<BaseItemDto?> GetItem(Guid itemId)
     {
         _ = _session ?? throw new InvalidOperationException("Session not stated");
-        return _userLibraryClient.GetItemAsync(_session.UserId, itemId);
+        return _jellyfinApiClient.Items[itemId].GetAsync();
     }
 
     public Task CloseTranscode(string playSessionId)
     {
-        return _hlsSegmentClient.StopEncodingProcessAsync(_sdkClientSettings.DeviceId, playSessionId);
+        throw new NotImplementedException();
+        //TODO return _hlsSegmentClient.StopEncodingProcessAsync(_sdkClientSettings.DeviceId, playSessionId);
     }
 
-    public Task<PlaybackInfoResponse> GetPlaybackInfo(Guid itemId)
+    public Task<PlaybackInfoResponse?> GetPlaybackInfo(Guid itemId)
     {
         _ = _session ?? throw new InvalidOperationException("Session not stated");
-        return _mediaInfoClient.GetPlaybackInfoAsync(itemId, _session.UserId);
+        return _jellyfinApiClient.Items[itemId].PlaybackInfo.GetAsync();
     }
 
     public Url GetPlaybackUrl(Guid itemId, MediaSourceInfo mediaSource)
     {
         var url = new Url(_host);
-        if (mediaSource.SupportsDirectStream)
+        if (mediaSource.SupportsDirectStream ?? false)
         {
             return url
                 .AppendPathSegment("Videos")
@@ -167,7 +180,7 @@ internal class JellyfinClient : IJellyfinClient
                 .AppendPathSegment("stream")
                 .SetQueryParams(new
                 {
-                    @static = true, MediaSourceId = mediaSource.Id, api_key = _sdkClientSettings.AccessToken
+                    @static = true, MediaSourceId = mediaSource.Id, api_key = _jellyfinSdkSettings.AccessToken
                 });
         }
 
@@ -178,17 +191,17 @@ internal class JellyfinClient : IJellyfinClient
 
     public Task ReportPlaybackStopped(PlaybackStopInfo playbackStopInfo)
     {
-        return _playstateClient.ReportPlaybackStoppedAsync(playbackStopInfo);
+        return _jellyfinApiClient.Sessions.Playing.Stopped.PostAsync(playbackStopInfo);
     }
 
     public Task ReportPlaybackStart(PlaybackStartInfo playbackStartInfo)
     {
-        return _playstateClient.ReportPlaybackStartAsync(playbackStartInfo);
+        return _jellyfinApiClient.Sessions.Playing.PostAsync(playbackStartInfo);
     }
 
     public Task ReportPlaybackProgress(PlaybackProgressInfo playbackProgessInfo)
     {
-        return _playstateClient.ReportPlaybackProgressAsync(playbackProgessInfo);
+        return _jellyfinApiClient.Sessions.Playing.Progress.PostAsync(playbackProgessInfo);
     }
 
     public void AddMessageHandler(IJellyfinMessageHandler messageHandler)
@@ -201,24 +214,24 @@ internal class JellyfinClient : IJellyfinClient
         _messageHandlers.Remove(messageHandler);
     }
 
-    public Task<IReadOnlyList<GroupInfoDto>> SyncPlayGetGroups()
+    public Task<List<GroupInfoDto>?> SyncPlayGetGroups()
     {
-        return _syncPlayClient.SyncPlayGetGroupsAsync();
+        return _jellyfinApiClient.SyncPlay.List.GetAsync();
     }
 
     public Task SyncPlayJoinGroup(Guid groupId)
     {
-        return _syncPlayClient.SyncPlayJoinGroupAsync(new JoinGroupRequestDto { GroupId = groupId });
+        return _jellyfinApiClient.SyncPlay.Join.PostAsync(new JoinGroupRequestDto { GroupId = groupId });
     }
 
     public Task SyncPlayLeaveGroup()
     {
-        return _syncPlayClient.SyncPlayLeaveGroupAsync();
+        return _jellyfinApiClient.SyncPlay.Leave.PostAsync();
     }
 
     public Task SyncPlayBuffering(bool isPlaying, Guid playlistItemId, long positionTicks)
     {
-        return _syncPlayClient.SyncPlayBufferingAsync(new BufferRequestDto
+        return _jellyfinApiClient.SyncPlay.Buffering.PostAsync(new BufferRequestDto
         {
             IsPlaying = isPlaying,
             PlaylistItemId = playlistItemId,
@@ -229,7 +242,7 @@ internal class JellyfinClient : IJellyfinClient
 
     public Task SyncPlayReady(bool isPlaying, Guid playlistItemId, long positionTicks)
     {
-        return _syncPlayClient.SyncPlayReadyAsync(new ReadyRequestDto
+        return _jellyfinApiClient.SyncPlay.Ready.PostAsync(new ReadyRequestDto
         {
             IsPlaying = isPlaying,
             PlaylistItemId = playlistItemId,
@@ -240,23 +253,28 @@ internal class JellyfinClient : IJellyfinClient
 
     public Task SyncPlayPause()
     {
-        return _syncPlayClient.SyncPlayPauseAsync();
+        return _jellyfinApiClient.SyncPlay.Pause.PostAsync();
     }
 
     public Task SyncPlayUnpause()
     {
-        return _syncPlayClient.SyncPlayUnpauseAsync();
+        return _jellyfinApiClient.SyncPlay.Unpause.PostAsync();
     }
 
     public Task SyncPlayStop()
     {
-        return _syncPlayClient.SyncPlayStopAsync();
+        return _jellyfinApiClient.SyncPlay.Stop.PostAsync();
     }
 
     public bool IsConnected { get => _session != null; }
 
     private async Task HandleWebsockeMessage(ResponseMessage info, CancellationToken cancellationToken)
     {
+        if (info.MessageType != WebSocketMessageType.Text)
+        {
+            return;
+        }
+
         var msg = JsonSerializer.Deserialize<JellyfinWebsockeMessage>(info.Text, s_serializerOptions);
         if (msg == null)
         {
@@ -270,7 +288,11 @@ internal class JellyfinClient : IJellyfinClient
             case SessionMessageType.ForceKeepAlive:
                 var fkaMsg = JsonSerializer.Deserialize<JellyfinWebsockeMessage<int>>(info.Text, s_serializerOptions)!;
                 _timeout = fkaMsg.Data;
-                _keepAliveCts?.Cancel();
+                if (_keepAliveCts != null)
+                {
+                    await _keepAliveCts.CancelAsync();
+                }
+
                 _keepAliveCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 _ = KeepAlive(_keepAliveCts.Token);
                 return;
@@ -310,8 +332,7 @@ internal class JellyfinClient : IJellyfinClient
                 break;
             case SessionMessageType.SyncPlayGroupUpdate:
                 var syncPlayGroupUpdateMessage =
-                    JsonSerializer.Deserialize<JellyfinWebsockeMessage<ObjectGroupUpdate>>(info.Text,
-                        s_serializerOptions)!;
+                    JsonSerializer.Deserialize<JellyfinWebsockeMessage<GroupUpdate>>(info.Text, s_serializerOptions)!;
                 foreach (var handler in _messageHandlers)
                 {
                     try
@@ -325,6 +346,7 @@ internal class JellyfinClient : IJellyfinClient
                 }
 
                 break;
+
             case SessionMessageType.SyncPlayCommand:
                 var syncPlayCommandMessage =
                     JsonSerializer.Deserialize<JellyfinWebsockeMessage<SendCommand>>(info.Text, s_serializerOptions)!;
@@ -340,6 +362,9 @@ internal class JellyfinClient : IJellyfinClient
                     }
                 }
 
+                break;
+            default:
+                _logger.LogDebug("Unhandled websocket message {type}, {text}", msg.MessageType, info.Text);
                 break;
         }
     }

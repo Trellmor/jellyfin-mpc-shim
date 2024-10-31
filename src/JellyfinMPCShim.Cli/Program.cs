@@ -37,7 +37,7 @@ builder.Configuration.Bind("Jellyfin", jellyfinSetting);
 var mpcSettings = new MpcSettings();
 builder.Configuration.Bind("MPC", mpcSettings);
 
-builder.Services.AddJellyfin(DefaultHttpClientHandlerDelegate);
+builder.Services.AddJellyfin();
 
 builder.Services.AddMpcClient(options =>
 {
@@ -46,8 +46,8 @@ builder.Services.AddMpcClient(options =>
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
-var settings = host.Services.GetRequiredService<SdkClientSettings>();
-settings.InitializeClientSettings(
+var settings = host.Services.GetRequiredService<JellyfinSdkSettings>();
+settings.Initialize(
     "Jellyfin MPC Shim cli",
     version,
     Environment.MachineName,

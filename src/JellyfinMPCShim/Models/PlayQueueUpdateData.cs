@@ -1,7 +1,4 @@
-﻿using System.Text.Json.Serialization;
-using Jellyfin.Sdk;
-
-namespace JellyfinMPCShim.Models;
+﻿namespace JellyfinMPCShim.Models;
 
 public class PlayQueueUpdateData
 {
@@ -12,9 +9,9 @@ public class PlayQueueUpdateData
     public long StartPositionTicks { get; set; }
     public bool IsPlaying { get; set; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public GroupShuffleMode ShuffleMode { get; set; }
+    //[JsonConverter(typeof(JsonStringEnumConverter))]
+    //public GroupShuffleMode ShuffleMode { get; set; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public GroupRepeatMode RepeatMode { get; set; }
+    //[JsonConverter(typeof(JsonStringEnumConverter))]
+    //public GroupRepeatMode RepeatMode { get; set; }
 }

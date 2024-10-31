@@ -1,5 +1,6 @@
 ﻿using Flurl;
 using Jellyfin.Sdk;
+using Jellyfin.Sdk.Generated.Models;
 using JellyfinMPCShim.Interfaces;
 
 namespace JellyfinMPCShim;

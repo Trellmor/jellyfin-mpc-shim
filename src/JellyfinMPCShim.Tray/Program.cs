@@ -12,7 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using WindowsFormsLifetime;
 
-var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3);
+var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3)!;
 
 
 if (Settings.Default.UpgradeNeeded)
@@ -49,7 +49,7 @@ var host = Host.CreateDefaultBuilder(args)
             c.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*", 0.8));
         }).ConfigurePrimaryHttpMessageHandler(DefaultHttpClientHandlerDelegate);
 
-        services.AddJellyfin(DefaultHttpClientHandlerDelegate);
+        services.AddJellyfin();
         services.AddMpcClient(options =>
         {
             options.TempPath = Path.Combine(Path.GetTempPath(), "jellyfin-mpc-shim-tray");
@@ -58,8 +58,8 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
-var settings = host.Services.GetRequiredService<SdkClientSettings>();
-settings.InitializeClientSettings(
+var settings = host.Services.GetRequiredService<JellyfinSdkSettings>();
+settings.Initialize(
     "Jellyfin MPC Shim Tray",
     version,
     Environment.MachineName,

@@ -1,8 +1,10 @@
 ﻿using System.Diagnostics;
-using Jellyfin.Sdk;
-using JellyfinMPCShim.Extensions;
+using System.Text.Json;
+using Jellyfin.Sdk.Generated.Models;
+using Jellyfin.Sdk.Generated.Sessions.Item.Playing;
 using JellyfinMPCShim.Interfaces;
 using JellyfinMPCShim.Models;
+using JellyfinMPCShim.Models.WebsocketData;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MPC_HC.Domain;
@@ -22,6 +24,11 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
     private List<PlaylistItem>? _syncPlaylist;
     private bool _syncPlay;
     private State _syncPlayState;
+
+    private static readonly JsonSerializerOptions s_serializerOptions = new JsonSerializerOptions
+    {
+        Converters = { new JsonGuidConverter(), new JsonNullableGuidConverter() }
+    };
 
     public MpcClient(ILogger<MpcClient> logger, IJellyfinClient jellyfinClient,
         IOptions<MpcClientOptions> mpcClientOptions)
@@ -244,7 +251,7 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
         }
     }
 
-    public async Task HandleSyncGroupUpdate(JellyfinWebsockeMessage<ObjectGroupUpdate> syncPlayGroupUpdateMessage)
+    public async Task HandleSyncGroupUpdate(JellyfinWebsockeMessage<GroupUpdate> syncPlayGroupUpdateMessage)
     {
         switch (syncPlayGroupUpdateMessage.Data.Type)
         {
@@ -263,7 +270,7 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
             case GroupUpdateType.StateUpdate:
                 break;
             case GroupUpdateType.PlayQueue:
-                var data = syncPlayGroupUpdateMessage.Data.GetData<PlayQueueUpdateData>();
+                var data = syncPlayGroupUpdateMessage.Data.GetData<PlayQueueUpdateData>(s_serializerOptions);
                 if (data != null)
                 {
                     _syncPlaylist = data.Playlist;
@@ -400,9 +407,9 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
             VolumeLevel = info.VolumeLevel,
             IsMuted = info.Muted,
             IsPaused = info.State == State.Paused,
-            RepeatMode = RepeatMode.RepeatNone,
+            RepeatMode = PlaybackProgressInfo_RepeatMode.RepeatNone,
             PositionTicks = info.Position.Ticks,
-            PlayMethod = PlayMethod.DirectStream,
+            PlayMethod = PlaybackProgressInfo_PlayMethod.DirectStream,
             PlaySessionId = _media.Video.PlaySessionId,
             MediaSourceId = _media.Video.MediaSource?.Id,
             CanSeek = true,
@@ -453,10 +460,10 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
                             VolumeLevel = args.NewInfo.VolumeLevel,
                             IsMuted = args.NewInfo.Muted,
                             IsPaused = args.NewInfo.State == State.Paused,
-                            RepeatMode = RepeatMode.RepeatNone,
+                            RepeatMode = PlaybackStartInfo_RepeatMode.RepeatNone,
                             PositionTicks = args.NewInfo.Position.Ticks,
                             PlaybackStartTimeTicks = DateTime.Now.Ticks,
-                            PlayMethod = PlayMethod.DirectStream,
+                            PlayMethod = PlaybackStartInfo_PlayMethod.DirectStream,
                             PlaySessionId = _media.Video.PlaySessionId,
                             MediaSourceId = _media.Video.MediaSource?.Id,
                             CanSeek = true,

@@ -1,8 +1,8 @@
-namespace JellyfinMPCShim.Tray;
+﻿namespace JellyfinMPCShim.Tray;
 
 internal class TrayApplicationContext : ApplicationContext
 {
-    public TrayApplicationContext(Form mainForm)
+    public TrayApplicationContext(MainForm mainForm)
         : base(mainForm) { }
 
 }
