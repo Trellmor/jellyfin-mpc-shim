@@ -54,46 +54,89 @@ internal class JellyfinClient : IJellyfinClient
         _cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
 
         _jellyfinSdkSettings.SetServerUrl(host);
-        _logger.LogDebug("Connecting  to {host}", _jellyfinSdkSettings.ServerUrl);
-        var systemInfo = await _jellyfinApiClient.System.Info.Public.GetAsync(cancellationToken: stoppingToken);
-        _logger.LogDebug("Connected to {host} {name} {version}", _jellyfinSdkSettings.ServerUrl, systemInfo.ServerName,
-            systemInfo.Version);
-        var authenticationResult = await _jellyfinApiClient.Users.AuthenticateByName.PostAsync(
-            new AuthenticateUserByName { Username = username, Pw = password }, cancellationToken: stoppingToken);
-        _session = authenticationResult.SessionInfo;
-        _jellyfinSdkSettings.SetAccessToken(authenticationResult.AccessToken);
-        _logger.LogDebug("Logged in as {name} (ID {id})", authenticationResult.User.Name, authenticationResult.User.Id);
-        await _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
+        _logger.LogInformation("Connecting to Jellyfin server at {Host}", _jellyfinSdkSettings.ServerUrl);
+
+        // Step 1: Verify server is reachable
+        PublicSystemInfo? systemInfo;
+        try
         {
-            PlayableMediaTypes = new List<MediaType?> { MediaType.Video },
-            SupportedCommands = new List<GeneralCommandType?>
+            systemInfo = await _jellyfinApiClient.System.Info.Public.GetAsync(cancellationToken: stoppingToken);
+            _logger.LogInformation("Connected to Jellyfin server: {ServerName} (version {Version})",
+                systemInfo?.ServerName, systemInfo?.Version);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to connect to Jellyfin server at {Host}", host);
+            throw new InvalidOperationException($"Cannot connect to Jellyfin server at {host}. Verify the server is running and the URL is correct.", ex);
+        }
+
+        // Step 2: Authenticate
+        AuthenticationResult? authenticationResult;
+        try
+        {
+            authenticationResult = await _jellyfinApiClient.Users.AuthenticateByName.PostAsync(
+                new AuthenticateUserByName { Username = username, Pw = password }, cancellationToken: stoppingToken);
+
+            if (authenticationResult?.AccessToken == null)
             {
-                GeneralCommandType.MoveUp,
-                GeneralCommandType.MoveDown,
-                GeneralCommandType.MoveLeft,
-                GeneralCommandType.MoveRight,
-                GeneralCommandType.Select,
-                GeneralCommandType.Back,
-                GeneralCommandType.ToggleFullscreen,
-                GeneralCommandType.GoHome,
-                GeneralCommandType.GoToSettings,
-                GeneralCommandType.TakeScreenshot,
-                GeneralCommandType.VolumeUp,
-                GeneralCommandType.VolumeDown,
-                GeneralCommandType.ToggleMute,
-                GeneralCommandType.SetAudioStreamIndex,
-                GeneralCommandType.SetSubtitleStreamIndex,
-                GeneralCommandType.Mute,
-                GeneralCommandType.Unmute,
-                GeneralCommandType.SetVolume,
-                GeneralCommandType.DisplayContent,
-                GeneralCommandType.Play,
-                GeneralCommandType.PlayState,
-                GeneralCommandType.PlayNext,
-                GeneralCommandType.PlayMediaSource
-            },
-            SupportsMediaControl = true
-        });
+                throw new InvalidOperationException("Authentication succeeded but no access token was returned");
+            }
+
+            _session = authenticationResult.SessionInfo;
+            _jellyfinSdkSettings.SetAccessToken(authenticationResult.AccessToken);
+            _logger.LogInformation("Authenticated as {Username} (User ID: {UserId}, Session ID: {SessionId})",
+                authenticationResult.User?.Name, authenticationResult.User?.Id, _session?.Id);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            _logger.LogError(ex, "Authentication failed for user {Username}", username);
+            throw new InvalidOperationException($"Authentication failed. Please check your username and password.", ex);
+        }
+
+        // Step 3: Register device capabilities (THIS IS CRITICAL FOR BEING RECOGNIZED AS A CAST TARGET)
+        try
+        {
+            var capabilities = new ClientCapabilitiesDto
+            {
+                PlayableMediaTypes = new List<MediaType?> { MediaType.Video, MediaType.Audio },
+                SupportedCommands = new List<GeneralCommandType?>
+                {
+                    GeneralCommandType.MoveUp,
+                    GeneralCommandType.MoveDown,
+                    GeneralCommandType.MoveLeft,
+                    GeneralCommandType.MoveRight,
+                    GeneralCommandType.Select,
+                    GeneralCommandType.Back,
+                    GeneralCommandType.ToggleFullscreen,
+                    GeneralCommandType.GoHome,
+                    GeneralCommandType.GoToSettings,
+                    GeneralCommandType.TakeScreenshot,
+                    GeneralCommandType.VolumeUp,
+                    GeneralCommandType.VolumeDown,
+                    GeneralCommandType.ToggleMute,
+                    GeneralCommandType.SetAudioStreamIndex,
+                    GeneralCommandType.SetSubtitleStreamIndex,
+                    GeneralCommandType.Mute,
+                    GeneralCommandType.Unmute,
+                    GeneralCommandType.SetVolume,
+                    GeneralCommandType.DisplayContent,
+                    GeneralCommandType.Play,
+                    GeneralCommandType.PlayState,
+                    GeneralCommandType.PlayNext,
+                    GeneralCommandType.PlayMediaSource
+                },
+                SupportsMediaControl = true,
+                SupportsPersistentIdentifier = true
+            };
+
+            await _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(capabilities, cancellationToken: stoppingToken);
+            _logger.LogInformation("Successfully registered device capabilities. Device should now be visible as cast target in Jellyfin.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to register device capabilities. The device may not appear as a cast target.");
+            throw new InvalidOperationException("Failed to register device with Jellyfin. The device may not appear as a cast target.", ex);
+        }
 
         var uri = new Url(host);
         uri.Scheme = uri.Scheme == "https" ? "wss" : "ws";
@@ -138,6 +181,9 @@ internal class JellyfinClient : IJellyfinClient
 
     public async Task Stop()
     {
+        // Track if we had an active session before stopping
+        var hadActiveSession = _session != null;
+
         if (_cts != null)
         {
             await _cts.CancelAsync();
@@ -156,15 +202,21 @@ internal class JellyfinClient : IJellyfinClient
         {
             _session = null;
             _jellyfinSdkSettings.SetAccessToken(null);
-            foreach (var handler in _messageHandlers)
+
+            // Only notify handlers if we actually had an active session
+            // This prevents the app from shutting down during reconnect attempts
+            if (hadActiveSession)
             {
-                try
+                foreach (var handler in _messageHandlers)
                 {
-                    await handler.HandleStop();
-                }
-                catch (Exception e)
-                {
-                    _logger.LogCritical(e, "{messageHandler} HandlePlay failed", handler);
+                    try
+                    {
+                        await handler.HandleStop();
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.LogCritical(e, "{messageHandler} HandleStop failed", handler);
+                    }
                 }
             }
         }
