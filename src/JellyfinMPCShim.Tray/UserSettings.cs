@@ -51,7 +51,10 @@ public class UserSettings
     [JsonIgnore]
     public bool IsFirstRun => JellyfinDeviceId == Guid.Empty;
 
-    private UserSettings() { }
+    /// <summary>
+    /// Public constructor required for JSON deserialization
+    /// </summary>
+    public UserSettings() { }
 
     /// <summary>
     /// Load settings from JSON file, or create defaults if not exists
@@ -63,9 +66,13 @@ public class UserSettings
             if (File.Exists(SettingsFile))
             {
                 var json = File.ReadAllText(SettingsFile);
+                System.Diagnostics.Debug.WriteLine($"Loading settings from {SettingsFile}: {json}");
+
                 var settings = JsonSerializer.Deserialize<UserSettings>(json, JsonOptions);
                 if (settings != null)
                 {
+                    System.Diagnostics.Debug.WriteLine($"Settings loaded: Host={settings.JellyfinHost}, User={settings.JellyfinUser}, DeviceId={settings.JellyfinDeviceId}");
+
                     // Ensure device ID is set
                     if (settings.JellyfinDeviceId == Guid.Empty)
                     {
@@ -74,6 +81,14 @@ public class UserSettings
                     }
                     return settings;
                 }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("Settings deserialization returned null!");
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"Settings file does not exist: {SettingsFile}");
             }
         }
         catch (Exception ex)
@@ -82,6 +97,7 @@ public class UserSettings
         }
 
         // Create new settings with fresh device ID
+        System.Diagnostics.Debug.WriteLine("Creating new settings with fresh DeviceId");
         var newSettings = new UserSettings
         {
             JellyfinDeviceId = Guid.NewGuid()
