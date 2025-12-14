@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Mime;
 using System.Reflection;
@@ -12,22 +12,35 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using WindowsFormsLifetime;
 
-var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3)!;
+var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.0.0";
 
+// Initialize the new robust settings system
+var userSettings = UserSettings.Instance;
 
-if (Settings.Default.UpgradeNeeded)
+// Attempt migration from legacy settings (ApplicationSettingsBase)
+try
 {
-    Settings.Default.Upgrade();
-    Settings.Default.UpgradeNeeded = false;
-    Settings.Default.JellyfinDeviceId = Guid.NewGuid();
-    Settings.Default.Save();
-    Settings.Default.Reload();
+    if (Settings.Default.UpgradeNeeded)
+    {
+        Settings.Default.Upgrade();
+        Settings.Default.UpgradeNeeded = false;
+        Settings.Default.Save();
+    }
+
+    // Migrate legacy settings to new JSON-based system
+    UserSettings.MigrateFromLegacy(Settings.Default);
+}
+catch (Exception ex)
+{
+    // Legacy settings migration failed - that's OK, we have the new system
+    System.Diagnostics.Debug.WriteLine($"Legacy settings migration: {ex.Message}");
 }
 
 static HttpMessageHandler DefaultHttpClientHandlerDelegate(IServiceProvider service) =>
     new SocketsHttpHandler
     {
-        AutomaticDecompression = DecompressionMethods.All, RequestHeaderEncodingSelector = (_, _) => Encoding.UTF8
+        AutomaticDecompression = DecompressionMethods.All,
+        RequestHeaderEncodingSelector = (_, _) => Encoding.UTF8
     };
 
 
@@ -64,6 +77,6 @@ settings.Initialize(
     "Jellyfin MPC Shim Tray",
     version,
     Environment.MachineName,
-    $"jellyfin-mpc-shim-tray-{version}-{Settings.Default.JellyfinDeviceId:N}");
+    $"jellyfin-mpc-shim-tray-{version}-{userSettings.JellyfinDeviceId:N}");
 var eh = host.Services.GetService<ExceptionLogger>();
 await host.RunAsync();
