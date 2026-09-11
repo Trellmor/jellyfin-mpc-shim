@@ -97,7 +97,7 @@ internal class JellyfinClient : IJellyfinClient
 
         var uri = new Url(host);
         uri.Scheme = uri.Scheme == "https" ? "wss" : "ws";
-        uri.AppendPathSegment("socket").SetQueryParams(new { api_key = _jellyfinSdkSettings.AccessToken });
+        uri.AppendPathSegment("socket").SetQueryParams(new { ApiKey = _jellyfinSdkSettings.AccessToken });
         _logger.LogDebug("Starting websocke client {uri}", uri);
         _wsc = new WebsocketClient(uri.ToUri());
         _wsc.MessageReceived.Subscribe(info =>
